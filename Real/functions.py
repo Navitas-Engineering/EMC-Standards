@@ -18,13 +18,23 @@ KNOWN_PREFIXES = {
     "GEGN",
     "BS",
     "S",
-    "EVS",
+    "EVS", 
 }
+"""Whitelist of known prefixes for document codes."""
+
 
 
 pdf_path = r"Incoming\NR_SP_ELP_27224_2006.pdf"
 
 def is_junk_candidate(candidate):
+    """Determine if a candidate string is invalid based on known junk patterns.
+    
+    Args:
+        candidate (str): The candidate string to evaluate.
+
+    Returns:
+        bool: True if the candidate is junk, False otherwise.
+    """
 
     candidate = candidate.upper()
 
@@ -54,6 +64,14 @@ def is_junk_candidate(candidate):
 
 
 def extract_pages(file_path):
+    """Extract text from the first few pages of a PDF file.
+    
+    Args:
+        file_path (str): The path to the PDF file.
+
+    Returns:
+        list: A list of dictionaries containing page numbers and extracted text.
+    """
     
     doc = fitz.open(file_path)
     pages = []
@@ -68,6 +86,13 @@ def extract_pages(file_path):
 
 
 def find_candidates(page_text):
+    """Find potential document code candidates in the given page text.
+    
+    Args:
+        page_text (str): The text extracted from a PDF page.
+        
+    Returns:
+        list: A list of candidate strings that match known patterns."""
 
     patterns = [
 
@@ -95,6 +120,13 @@ def find_candidates(page_text):
     return candidates
 
 def score_candidates(pages):
+    """Score candidate strings based on their occurrence and characteristics in the extracted pages.
+    
+    Args:
+        pages (list): A list of dictionaries containing page numbers and extracted text.
+    Returns:
+            dict: A dictionary mapping candidate strings to their scores.
+    """
 
     scores = defaultdict(int)
 
@@ -177,5 +209,4 @@ def get_file_names(directory):
                 )
 
     return file_names
-
 
