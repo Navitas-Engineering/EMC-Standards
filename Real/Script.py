@@ -1,40 +1,109 @@
-from extraction import extract_pages, score_candidates, choose_best_candidate, get_file_names, test_single_file
-import numpy as np
+import pandas as pd2
+
+from extraction import (
+    extract_pages,
+    score_candidates,
+    choose_best_candidate,
+    get_file_names,
+    test_single_file
+)
+
+from renaming import (
+    normalise_code,
+    build_filename,
+    extract_designation_metadata
+)
 
 directory = r"Sample Documents"
 
-file_list = np.array([])
-conversion_list = np.array([])
-counter = 0
-file_list = get_file_names(directory)
-print("file_list = ", file_list)
+sample_list = get_file_names(directory)
 
+results = []
 
+print("Found files:")
+for file in sample_list:
+    print(file)
 
-for file in file_list:
-    
+print("\nProcessing...\n")
+
+for file in sample_list:
+
     pages = extract_pages(file)
 
     scores = score_candidates(pages)
 
-    best_candidate = str(choose_best_candidate(scores))
+    standard = choose_best_candidate(scores)
 
-    print(f"Best candidate for {file}: {best_candidate}")
-    conversion_list = np.append(conversion_list, best_candidate)
+    if standard is None:
 
-final_list = np.column_stack((file_list, conversion_list))
-print ("Final list = ", final_list)
+        print(f"No candidate found for {file}")
 
+        results.append(
+            [
+                file,
+                None,
+                None,
+                None
+            ]
+        )
 
-test_single_file(r"Sample Documents\GEGN_8646_2017.pdf")
+        continue
 
+    standard.normalised_code = normalise_code(
+        standard.raw_code
+    )
 
-pages = extract_pages(
+    metadata = extract_designation_metadata(
+        pages,
+        standard.raw_code
+    )
+
+    standard.year = metadata["year"]
+    standard.amendment = metadata["amendment"]
+    standard.amendment_year = metadata["amendment_year"]
+
+    # BR documents should not have modern years
+    if (
+        standard.normalised_code.startswith("BR_")
+        and standard.year is not None
+        and standard.year > 2000
+    ):
+        print(
+            f"WARNING: Suspicious BR year detected "
+            f"({standard.year}) in {file}"
+        )
+
+        standard.year = 0
+
+    standard.filename = build_filename(
+        standard
+    )
+
+    print(
+        f"{file} -> {standard.filename}"
+    )
+
+    results.append(
+        [
+            file,
+            standard.raw_code,
+            standard.normalised_code,
+            standard.filename
+        ]
+    )
+
+final_list = pd2.DataFrame(results, columns=["Original File", "Raw Code", "Normalised Code", "Filename"])
+
+print("\nFinal List:")
+print(final_list)
+
+test_single_file(
     r"Sample Documents\GEGN_8646_2017.pdf"
 )
 
-print("First page of text:")
-print(pages[0]["text"])
-        
-    
-    
+test_single_file(
+    r"Sample Documents\IEC_62271-1_2017_ISH_2021.pdf"
+)
+
+#for page in extract_pages(r"Sample Documents\IEC_62271-1_2017_ISH_2021.pdf"):
+#    print("Page", page, page["text"])

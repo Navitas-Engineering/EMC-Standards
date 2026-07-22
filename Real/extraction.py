@@ -4,6 +4,8 @@ import os
 from collections import defaultdict
 import numpy as np
 
+from utils import StandardData
+
 MAX_PAGES = 5
 
 KNOWN_PREFIXES = {
@@ -112,20 +114,27 @@ def find_candidates(page_text):
 
         r'IEC\s+\d+(?:-\d+)*',
 
-        r'\b[A-Z]{2,10}(?:\s+)?\d+\b'    
-    ]
+        r'GM/[A-Z]+\d+',
+
+        r'\b[A-Z]{2,5}\s+\d{3,}\b'    ]
 
     candidates = []
 
     for pattern in patterns:
 
-        matches = re.findall(
+        for match in re.finditer(
             pattern,
             page_text,
             re.IGNORECASE
-        )
+        ):
 
-        candidates.extend(matches)
+            candidates.append(
+                (
+                    match.group(),
+                    match.start()
+                )
+            )
+        
 
     return candidates
 
@@ -141,10 +150,10 @@ def score_candidates(pages):
     scores = defaultdict(int)
 
     page_weights = {
-        1: 50,
-        2: 25,
-        3: 10,
-        4: 5,
+        1: 500,
+        2: 100,
+        3: 25,
+        4: 10,
         5: 1
     }
 
@@ -156,9 +165,8 @@ def score_candidates(pages):
             page_data["text"]
         )
 
-        for candidate in candidates:
-
-            candidate = candidate.strip()
+        for candidate, position in candidates:
+            candidate = candidate.strip().upper()
 
             if is_junk_candidate(candidate):
                 continue
@@ -171,6 +179,19 @@ def score_candidates(pages):
                 1
             )
 
+            # Appears near start of page
+            if position < 100:
+                score += 500
+
+            elif position < 250:
+                score += 300
+
+            elif position < 500:
+                score += 150
+
+            elif position < 1000:
+                score += 50
+
             if "/" in candidate:
                 score += 10
 
@@ -179,6 +200,16 @@ def score_candidates(pages):
                 candidate
             ):
                 score += 10
+
+            #context around candidate
+            text = page_data["text"]
+
+            window_start = max(0, position - 50)
+            window_end = min(len(text), position + len(candidate) + 50)
+            context = text[window_start:window_end].upper()
+
+            if "SUPERSEDE" in context or "WITHDRAWN" in context:
+                score -=300
 
             for prefix in KNOWN_PREFIXES:
 
@@ -196,12 +227,38 @@ def score_candidates(pages):
 def choose_best_candidate(scores):
 
     if not scores:
-
         return None
 
-    return max(
-        scores.items(),
+    filtered_scores = {}
+
+    for candidate, score in scores.items():
+
+        keep = True
+
+        for other, other_score in scores.items():
+
+            if candidate == other:
+                continue
+
+            if (
+                candidate in other
+                and len(other) > len(candidate)
+                and other_score >= score
+            ):
+                keep = False
+                break
+
+        if keep:
+            filtered_scores[candidate] = score
+
+    code, score = max(
+        filtered_scores.items(),
         key=lambda x: x[1]
+    )
+
+    return StandardData(
+        raw_code=code,
+        score=score
     )
 
 def get_file_names(directory):
@@ -219,6 +276,7 @@ def get_file_names(directory):
                 )
 
     return file_names
+
 
 def test_single_file(file_path):
     """Test the extraction and scoring of a single PDF file.
