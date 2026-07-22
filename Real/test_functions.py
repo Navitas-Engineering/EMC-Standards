@@ -1,27 +1,28 @@
-from functions import extract_pages, is_junk_candidate, score_candidates, choose_best_candidate, get_file_names,  KNOWN_PREFIXES
-test_file = r"Sample Documents\DLR_ENG_STD_ES102_2012.pdf"
+# Real/test_functions.py
+from pathlib import Path
+from extraction import extract_pages, score_candidates, choose_best_candidate, get_file_names
 
+root = Path(__file__).resolve().parents[1]
+test_file = root / "Sample Documents" / "DLR_ENG_STD_ES102_2012.pdf"
+test_dir = root / "Sample Documents"
 
 def test_extract_pages():
-    test_file = r"Sample Documents\DLR_ENG_STD_ES102_2012.pdf"
-    pages = extract_pages(test_file)
-    assert len(pages) > 0, "No pages extracted from the PDF."
+    pages = extract_pages(str(test_file))
+    assert len(pages) > 0
 
 def test_score_candidates():
-    test_file = r"Sample Documents\DLR_ENG_STD_ES102_2012.pdf"
-    pages = extract_pages(test_file)
+    pages = extract_pages(str(test_file))
     scores = score_candidates(pages)
-    assert isinstance(scores, dict), "Scores should be a dictionary."
-    assert len(scores) > 0, "No candidates scored."
+    assert isinstance(scores, dict)
+    assert len(scores) > 0
 
 def test_choose_best_candidate():
-    pages = extract_pages(test_file)
+    pages = extract_pages(str(test_file))
     scores = score_candidates(pages)
     best_candidate = choose_best_candidate(scores)
-    assert best_candidate is not None, "No best candidate found."
+    assert best_candidate is not None
 
 def test_get_file_names():
-    directory = r"Sample Documents"
-    file_list = get_file_names(directory)
-    assert isinstance(file_list, list), "File list should be a list."
-    assert len(file_list) > 0, "No files found in the directory."
+    file_list = get_file_names(str(test_dir))
+    assert isinstance(file_list, list)
+    assert len(file_list) > 0

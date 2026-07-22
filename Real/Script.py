@@ -1,6 +1,4 @@
-import fitz
-
-from functions import extract_pages, is_junk_candidate, score_candidates, choose_best_candidate, get_file_names,  KNOWN_PREFIXES
+from extraction import extract_pages, score_candidates, choose_best_candidate, get_file_names, test_single_file
 import numpy as np
 
 directory = r"Sample Documents"
@@ -28,4 +26,15 @@ final_list = np.column_stack((file_list, conversion_list))
 print ("Final list = ", final_list)
 
 
+test_single_file(r"Sample Documents\GEGN_8646_2017.pdf")
 
+
+pages = extract_pages(
+    r"Sample Documents\GEGN_8646_2017.pdf"
+)
+
+print("First page of text:")
+print(pages[0]["text"])
+        
+    
+    

@@ -1,10 +1,12 @@
-from functions import extract_pages, is_junk_candidate, score_candidates, choose_best_candidate, get_file_names,  KNOWN_PREFIXES
-import re 
+from pathlib import Path
+from extraction import extract_pages, is_junk_candidate, score_candidates, choose_best_candidate, get_file_names,  KNOWN_PREFIXES
+import re
+ 
+test_file= Path(__file__).resolve().parents[1] / "Sample Documents" / "DLR_ENG_STD_ES102_2012.pdf"
 
 def test_contains_DLR():
-    test_file = r"Sample Documents\DLR_ENG_STD_ES102_2012.pdf"
-
     test_pages = extract_pages(test_file)
+    
     test_scores = score_candidates(test_pages)
     print(f"Scores for {test_file}: {test_scores}")
     test_best_candidate = str(choose_best_candidate(test_scores))
@@ -14,7 +16,6 @@ def test_contains_DLR():
     
     
 def test_equals_DLR():
-    test_file = r"Sample Documents\DLR_ENG_STD_ES102_2012.pdf"
 
     test_pages = extract_pages(test_file)
     test_scores = score_candidates(test_pages)
