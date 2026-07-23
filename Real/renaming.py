@@ -83,24 +83,6 @@ def build_filename(metadata):
     return filename
 
 def extract_designation_metadata(pages, raw_code):
-    """
-    Extract metadata such as year, amendment, and amendment year from the extracted pages based on the raw code.
-    Args:
-        pages (list): A list of dictionaries containing page numbers and extracted text.
-        raw_code (str): The raw code extracted from the PDF file.
-    Returns:
-        dict: A dictionary containing the extracted metadata with keys 'year', 'amendment', and 'amendment_year'.
-    """
-
-    full_text = "\n".join(
-    page["text"]
-    for page in pages
-)
-
-    text = "\n".join(
-        page["text"]
-        for page in pages
-    )
 
     metadata = {
         "year": None,
@@ -108,167 +90,150 @@ def extract_designation_metadata(pages, raw_code):
         "amendment_year": None
     }
 
+    text = "\n".join(
+        page["text"]
+        for page in pages
+    )
+
     escaped_code = re.escape(raw_code)
 
     #
-    # Look near the detected code first
+    # 1. ISH standards
+    # IEC 62271-1:2017/ISH1:2021
     #
 
-    code_match = re.search(
-        escaped_code,
+    ish_match = re.search(
+        escaped_code +
+        r'.*?:(\d{4})'
+        r'.*?ISH\d*[:\-]?(\d{4})',
         text,
-        re.IGNORECASE
+        re.IGNORECASE | re.DOTALL
     )
 
-    if code_match:
+    if ish_match:
 
-        start = max(0, code_match.start() - 100)
-        end = min(len(text), code_match.end() + 250)
-
-        window = text[start:end]
-
-        designation_match = re.search(
-            escaped_code +
-            r':(\d{4}).*?ISH\d*:(\d{4})',
-            text,
-            re.IGNORECASE | re.DOTALL
+        metadata["year"] = int(
+            ish_match.group(1)
         )
-        if designation_match:
-            metadata["year"] = int(
-                designation_match.group(1)
+
+        metadata["amendment"] = "ISH"
+
+        metadata["amendment_year"] = int(
+            ish_match.group(2)
         )
-            metadata["amendment"] = "ISH"
 
-            metadata["amendment_year"] = int(
-                designation_match.group(2)
-            )
+        return metadata
 
-            return metadata
 
-        #
-        # Find all years near the code
-        #
+    #
+    # 2. Amendment standards
+    # EN 55032:2015+A11:2020
+    # IEC 62271-1:2017+AMD1:2021
+    #
+
+    amendment_match = re.search(
+        escaped_code +
+        r'.*?:(\d{4})'
+        r'.*?(A\d+|AMD\d+)[:\-]?(\d{4})',
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if amendment_match:
+
+        metadata["year"] = int(
+            amendment_match.group(1)
+        )
+
+        metadata["amendment"] = (
+            amendment_match.group(2)
+            .upper()
+        )
+
+        metadata["amendment_year"] = int(
+            amendment_match.group(3)
+        )
+
+        return metadata
+
+    #
+    # 3. Standard designation
+    # EN 55032:2015
+    # IEC 61439-1:2021
+    #
+
+    date_match = re.search(
+    r'DATE\s+[A-Z]+\s+((?:19|20)\d{2})',
+    text,
+    re.IGNORECASE
+    )
+
+    if date_match:
+
+        metadata["year"] = int(
+            date_match.group(1)
+        )
+        return metadata
+
+
+    year_match = re.search(
+        escaped_code +
+        r'[:/\-\s]+(\d{4})',
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if year_match:
+
+        metadata["year"] = int(
+            year_match.group(1)
+        )
+        print(metadata)
+        return metadata
+
+    #
+    # 4. Fallback
+    #
+
+    all_years = []
+
+    page_weights = {
+        1: 50,
+        2: 25,
+        3: 10,
+        4: 5,
+        5: 1
+    }
+
+    for page in pages:
 
         years = re.findall(
             r'\b(?:19|20)\d{2}\b',
-            window
+            page["text"]
         )
 
-        if years:
-            metadata["year"] = int(years[0])
+        for year in years:
 
-        #
-        # Amendment detection
-        #
-
-        amendment_match = re.search(
-            r':(\d{4}).*?(A\d+|AMD\d+):(\d{4})',
-            window,
-            re.IGNORECASE
-        )
-
-        if amendment_match:
-
-            metadata["amendment"] = (
-                amendment_match.group(1)
-                .upper()
-            )
-
-            amendment_pos = amendment_match.end()
-
-            amendment_window = (
-                window[
-                    amendment_pos:
-                    amendment_pos + 100
-                ]
-            )
-
-            amendment_year_match = re.search(
-                r'\b(?:19|20)\d{2}\b',
-                amendment_window
-            )
-
-            if amendment_year_match:
-
-                metadata["amendment_year"] = int(
-                    amendment_year_match.group(0)
+            score = (
+                page_weights.get(
+                    page["page"],
+                    1
                 )
-
-        #
-        # ISH detection
-        #
-
-        else:
-
-            ish_match = re.search(
-                r'\bISH\b',
-                window,
-                re.IGNORECASE
+                + int(year)
             )
 
-            if ish_match:
-
-                metadata["amendment"] = "ISH"
-
-                ish_pos = ish_match.end()
-
-                ish_window = (
-                    window[
-                        ish_pos:
-                        ish_pos + 100
-                    ]
+            all_years.append(
+                (
+                    score,
+                    int(year)
                 )
-
-                ish_year_match = re.search(
-                    r'\b(?:19|20)\d{2}\b',
-                    ish_window
-                )
-
-                if ish_year_match:
-
-                    metadata["amendment_year"] = int(
-                        ish_year_match.group(0)
-                    )
-
-    #
-    # Fallback if no year found
-    #
-
-    if metadata["year"] is None:
-
-        all_years = []
-
-        for page in pages:
-
-            page_no = page["page"]
-
-            years = re.findall(
-                r'\b(?:19|20)\d{2}\b',
-                page["text"]
             )
 
-            for year in years:
+    if all_years:
 
-                score = 0
-
-                if page_no == 1:
-                    score += 50
-                elif page_no == 2:
-                    score += 25
-                elif page_no == 3:
-                    score += 10
-
-                score += int(year)
-
-                all_years.append(
-                    (score, int(year))
-                )
-
-        if all_years:
-
-            metadata["year"] = max(
-                all_years,
-                key=lambda x: x[0]
-            )[1]
+        metadata["year"] = max(
+            all_years,
+            key=lambda x: x[0]
+        )[1]
 
     return metadata
