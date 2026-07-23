@@ -1,20 +1,10 @@
-import pandas as pd2
+import pandas as pd
 
-from extraction import (
-    extract_pages,
-    score_candidates,
-    choose_best_candidate,
-    get_file_names,
+from extraction import get_file_names
+from processing import (
+    process_file,
+    test_single_file
 )
-
-from renaming import (
-    normalise_code,
-    build_filename,
-    extract_designation_metadata
-)
-
-from processing import process_file, test_single_file
-
 
 directory = r"Sample Documents"
 
@@ -30,11 +20,7 @@ print("\nProcessing...\n")
 
 for file in sample_list:
 
-    pages = extract_pages(file)
-
-    scores = score_candidates(pages)
-
-    standard = choose_best_candidate(scores)
+    standard = process_file(file)
 
     if standard is None:
 
@@ -51,36 +37,6 @@ for file in sample_list:
 
         continue
 
-    standard.normalised_code = normalise_code(
-        standard.raw_code
-    )
-
-    metadata = extract_designation_metadata(
-        pages,
-        standard.raw_code
-    )
-
-    standard.year = metadata["year"]
-    standard.amendment = metadata["amendment"]
-    standard.amendment_year = metadata["amendment_year"]
-
-    # BR documents should not have modern years
-    if (
-        standard.normalised_code.startswith("BR_")
-        and standard.year is not None
-        and standard.year > 2000
-    ):
-        print(
-            f"WARNING: Suspicious BR year detected "
-            f"({standard.year}) in {file}"
-        )
-
-        standard.year = 0
-
-    standard.filename = build_filename(
-        standard
-    )
-
     print(
         f"{file} -> {standard.filename}"
     )
@@ -94,10 +50,24 @@ for file in sample_list:
         ]
     )
 
-final_list = pd2.DataFrame(results, columns=["Original File", "Raw Code", "Normalised Code", "Filename"])
+final_list = pd.DataFrame(
+    results,
+    columns=[
+        "Original File",
+        "Raw Code",
+        "Normalised Code",
+        "Filename"
+    ]
+)
 
 print("\nFinal List:")
 print(final_list)
+
+# Optional export
+# final_list.to_excel(
+#     "RenamePreview.xlsx",
+#     index=False
+# )
 
 test_single_file(
     r"Sample Documents\GEGN_8646_2017.pdf"
@@ -106,6 +76,3 @@ test_single_file(
 test_single_file(
     r"Sample Documents\IEC_62271-1_2017_ISH_2021.pdf"
 )
-
-#for page in extract_pages(r"Sample Documents\IEC_62271-1_2017_ISH_2021.pdf"):
-#    print("Page", page, page["text"])

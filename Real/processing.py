@@ -1,5 +1,5 @@
 from extraction import choose_best_candidate, extract_pages, find_candidates, find_candidates, score_candidates
-from renaming import build_filename, extract_designation_metadata, normalise_code
+from Real.extraction_continued import build_filename, extract_designation_metadata, normalise_code
 
 def process_file(file_path):
 
@@ -24,6 +24,14 @@ def process_file(file_path):
     standard.year = metadata["year"]
     standard.amendment = metadata["amendment"]
     standard.amendment_year = metadata["amendment_year"]
+
+    # BR documents should not have modern years
+    if (
+        standard.normalised_code.startswith("BR_")
+        and standard.year is not None
+        and standard.year > 2000
+    ):
+        standard.year = 0
 
     standard.filename = build_filename(
         standard
