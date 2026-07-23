@@ -5,7 +5,6 @@ from extraction import (
     score_candidates,
     choose_best_candidate,
     get_file_names,
-    test_single_file
 )
 
 from renaming import (
@@ -13,6 +12,9 @@ from renaming import (
     build_filename,
     extract_designation_metadata
 )
+
+from processing import process_file, test_single_file
+
 
 directory = r"Sample Documents"
 
