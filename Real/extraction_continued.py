@@ -1,4 +1,4 @@
-import re
+import re, os
 
 def normalise_code(code):
 
@@ -237,3 +237,48 @@ def extract_designation_metadata(pages, raw_code):
         )[1]
 
     return metadata
+
+import os
+
+
+def rename_file(old_path, new_filename):
+    """
+    Rename a PDF file using the generated filename.
+
+    Args:
+        old_path (str): Existing file path.
+        new_filename (str): New filename without extension.
+
+    Returns:
+        tuple:
+            (success, message)
+    """
+
+    directory = os.path.dirname(old_path)
+
+    new_path = os.path.join(
+        os.path.dirname(old_path),
+        new_filename.filename + ".pdf"
+    )
+
+    if old_path == new_path:
+        return (
+            False,
+            "Already correctly named"
+        )
+
+    if os.path.exists(new_path):
+        return (
+            False,
+            f"Target already exists: {new_path}"
+        )
+
+    os.rename(
+        old_path,
+        new_path
+    )
+
+    return (
+        True,
+        new_path
+    )

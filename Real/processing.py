@@ -2,7 +2,11 @@ from extraction import choose_best_candidate, extract_pages, find_candidates, fi
 from extraction_continued import build_filename, extract_designation_metadata, normalise_code
 
 def process_file(file_path):
-
+    """Process a single PDF file to extract and score candidates, and build a filename based on the best candidate.
+    Args:
+        file_path (str): The path to the PDF file to process.
+    Returns:
+        StandardData: An instance of StandardData containing the extracted metadata and filename, or None if no valid candidate was found."""
     pages = extract_pages(file_path)
 
     scores = score_candidates(pages)
