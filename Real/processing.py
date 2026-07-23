@@ -1,5 +1,5 @@
 from extraction import choose_best_candidate, extract_pages, find_candidates, find_candidates, score_candidates
-from Real.extraction_continued import build_filename, extract_designation_metadata, normalise_code
+from extraction_continued import build_filename, extract_designation_metadata, normalise_code
 
 def process_file(file_path):
 
