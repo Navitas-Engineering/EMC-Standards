@@ -15,7 +15,7 @@ def test_contains_DLR():
     assert re.match(r"^(?=.*DLR)(?=.*ENG)(?=.*STD)(?=.*ES)(?=.*102).*$", test_best_candidate), f"Could not extract code, expected 'DLR_ENG_STD_ES102', but got '{test_best_candidate}'"
     
     
-"""def test_equals_DLR():
+def test_equals_DLR():
 
     test_pages = extract_pages(test_file)
     test_scores = score_candidates(test_pages)
@@ -24,4 +24,4 @@ def test_contains_DLR():
     print(f"Best candidate for {test_file}: {test_best_candidate}")
     
     assert test_best_candidate == "DLR_ENG_STD_ES102_2012", f"Code reformatting failed, expected 'DLR_ENG_STD_ES102_2012', but got '{test_best_candidate}'"
-"""
+
