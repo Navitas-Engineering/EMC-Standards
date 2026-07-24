@@ -1,15 +1,29 @@
 class StandardData:
-    """Class to hold standard metadata. Stores the raw code, normalised code, year, amendment no., amendment year, filename and score for a standard.
-    Attributes:
-        raw_code (str): The original code extracted from the PDF file, before any normalisation or reformatting.
-        normalised_code (str): New filename.
-        year (int): Year of publication.
-        amendment (str): Amendment number.
-        amendment_year (int): Year of amendment.
-        filename (str): Old filename.
-        score (int): Used for scoring"""
+    """
+    Stores information extracted from a PDF and information used to
+    validate the proposed filename.
+    """
 
-    def __init__(self, raw_code: str, normalised_code: str = None, year: int = None, amendment: str = None, amendment_year: int = None, filename: str = None, score: int = 0):
+    def __init__(
+        self,
+        raw_code=None,
+        normalised_code=None,
+        year=None,
+        amendment=None,
+        amendment_year=None,
+        filename=None,
+        score=0,
+        source_filename=None,
+        filename_hint_code=None,
+        filename_hint_year=None,
+        filename_hint_amendment=None,
+        filename_hint_amendment_year=None,
+        status="SUCCESS",
+        reasons=None,
+        extracted_text_length=0,
+        proposed_path=None,
+        rename_result=None
+    ):
         self.raw_code = raw_code
         self.normalised_code = normalised_code
         self.year = year
@@ -18,19 +32,48 @@ class StandardData:
         self.filename = filename
         self.score = score
 
+        self.source_filename = source_filename
+        self.filename_hint_code = filename_hint_code
+        self.filename_hint_year = filename_hint_year
+        self.filename_hint_amendment = filename_hint_amendment
+        self.filename_hint_amendment_year = filename_hint_amendment_year
+
+        self.status = status
+        self.reasons = reasons if reasons is not None else []
+
+        self.extracted_text_length = extracted_text_length
+        self.proposed_path = proposed_path
+        self.rename_result = rename_result
+
+    def add_reason(self, reason):
+        """
+        Add a validation reason without creating duplicates.
+        """
+
+        if reason and reason not in self.reasons:
+            self.reasons.append(reason)
+
+    def reasons_text(self):
+        """
+        Return reasons in a format suitable for an Excel cell.
+        """
+
+        return "; ".join(self.reasons)
+
     def __repr__(self):
-        return(
-        f"StandardData("
-        f"raw_code='{self.raw_code}', "
-        f"normalised_code='{self.normalised_code}', "
-        f"year={self.year}, "
-        f"amendment={self.amendment}, "
-        f"amendment_year={self.amendment_year}, "
-        f"filename='{self.filename}', "
-        f"score={self.score}"
-        f")"
-    )
-
-    
-
-     
+        return (
+            "StandardData("
+            f"raw_code={self.raw_code!r}, "
+            f"normalised_code={self.normalised_code!r}, "
+            f"year={self.year!r}, "
+            f"amendment={self.amendment!r}, "
+            f"amendment_year={self.amendment_year!r}, "
+            f"filename={self.filename!r}, "
+            f"score={self.score!r}, "
+            f"source_filename={self.source_filename!r}, "
+            f"filename_hint_code={self.filename_hint_code!r}, "
+            f"filename_hint_year={self.filename_hint_year!r}, "
+            f"status={self.status!r}, "
+            f"reasons={self.reasons!r}"
+            ")"
+        )

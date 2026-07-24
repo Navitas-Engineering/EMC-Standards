@@ -58,7 +58,8 @@ def is_junk_candidate(candidate):
         "APPENDIX",
         "SECTION",
         "FIGURE",
-        "TABLE"
+        "TABLE",
+        "GEL"
     ]
 
     return any(
@@ -116,7 +117,13 @@ def find_candidates(page_text):
 
         r'GM/[A-Z]+\d+',
 
-        r'\b[A-Z]{2,5}\s+\d{3,}\b'    ]
+        r'GE[/\s][A-Z]{2,5}\d+',
+
+        #r'\b[A-Z]{2,5}\s+\d{3,}\b'    
+
+        r'(?:FPRTS|PRTS|TS)\s+\d+(?:-\d+)+'
+
+        ]
 
     candidates = []
 
@@ -201,6 +208,20 @@ def score_candidates(pages):
             ):
                 score += 10
 
+            if candidate.startswith("TS "):
+                score -= 3000
+
+            score += (
+                candidate.count("-")
+                * 200
+            )
+
+            if re.match(
+                r'^(IEC|EN)\s+\d',
+                candidate
+            ):
+                score += 200
+
             #context around candidate
             text = page_data["text"]
 
@@ -211,11 +232,20 @@ def score_candidates(pages):
             if "SUPERSEDE" in context or "WITHDRAWN" in context:
                 score -=300
 
+            if "COMMITTEE REF" in context:
+                score -= 2000
+
+            if re.fullmatch(
+                r'[A-Z]{2,5}/\d+/\d+',
+                candidate
+            ):
+                score -= 2000
+
             for prefix in KNOWN_PREFIXES:
 
                 if candidate.upper().startswith(prefix):
 
-                    score += 50
+                    score += 200
 
                     break
 
@@ -243,7 +273,7 @@ def choose_best_candidate(scores):
             if (
                 candidate in other
                 and len(other) > len(candidate)
-                and other_score >= score
+
             ):
                 keep = False
                 break

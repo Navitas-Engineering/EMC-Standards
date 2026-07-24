@@ -25,6 +25,39 @@ def normalise_code(code):
         code
     )
 
+    # GE/RT8270 -> GE/RT/8270
+    code = re.sub(
+        r'^(GE)/([A-Z]+)(\d+)$',
+        r'\1/\2/\3',
+        code
+    )
+
+    tokens = re.split(
+        r'[/\s]+',
+        code
+    )
+
+    #
+    # Join trailing numeric sections into part numbers
+    #
+    for i, token in enumerate(tokens):
+
+        if (
+            token.isdigit()
+            and len(token) >= 4
+        ):
+
+            prefix = tokens[:i]
+            suffix = tokens[i:]
+
+            code = (
+                "/".join(prefix)
+                + "/"
+                + "-".join(suffix)
+            )
+
+            break
+
     parts = []
 
     for token in re.split(
@@ -32,7 +65,7 @@ def normalise_code(code):
         code
     ):
 
-        # Preserve numeric sections
+        # Preserve multipart numbers
         if re.fullmatch(
             r'\d+(?:-\d+)+',
             token
@@ -157,15 +190,13 @@ def extract_designation_metadata(pages, raw_code):
         return metadata
 
     #
-    # 3. Standard designation
-    # EN 55032:2015
-    # IEC 61439-1:2021
+    # 3. Explicit Date fields
     #
 
     date_match = re.search(
-    r'DATE\s+[A-Z]+\s+((?:19|20)\d{2})',
-    text,
-    re.IGNORECASE
+        r'DATE\s*:?\s*.*?((?:19|20)\d{2})',
+        text,
+        re.IGNORECASE | re.DOTALL
     )
 
     if date_match:
@@ -173,97 +204,138 @@ def extract_designation_metadata(pages, raw_code):
         metadata["year"] = int(
             date_match.group(1)
         )
-        return metadata
 
+    #
+    # Remove compliance dates before generic searches
+    #
 
-    year_match = re.search(
-        escaped_code +
-        r'[:/\-\s]+(\d{4})',
+    text_without_compliance = re.sub(
+        r'COMPLIANCE\s+DATE\s*:?.*?(?:19|20)\d{2}',
+        '',
         text,
-        re.IGNORECASE | re.DOTALL
+        flags=re.IGNORECASE | re.DOTALL
     )
 
-    if year_match:
-
-        metadata["year"] = int(
-            year_match.group(1)
-        )
-        print(metadata)
-        return metadata
-
     #
-    # 4. Fallback
+    # 4. Standard designation
+    #
+    # EN 55032:2015
+    # IEC 61439-1:2021
     #
 
-    all_years = []
+    if metadata["year"] is None:
 
-    page_weights = {
-        1: 50,
-        2: 25,
-        3: 10,
-        4: 5,
-        5: 1
-    }
-
-    for page in pages:
-
-        years = re.findall(
-            r'\b(?:19|20)\d{2}\b',
-            page["text"]
+        year_match = re.search(
+            escaped_code +
+            r'.{0,50}?((?:19|20)\d{2})',
+            text_without_compliance,
+            re.IGNORECASE | re.DOTALL
         )
 
-        for year in years:
+        if year_match:
 
-            score = (
-                page_weights.get(
+            metadata["year"] = int(
+                year_match.group(1)
+            )
+
+    #
+    # 5. Fallback
+    #
+
+    if metadata["year"] is None:
+
+        all_years = []
+
+        page_weights = {
+            1: 50,
+            2: 25,
+            3: 10,
+            4: 5,
+            5: 1
+        }
+
+        for page in pages:
+
+            years = re.findall(
+                r'\b(?:19|20)\d{2}\b',
+                page["text"]
+            )
+
+            for year in years:
+
+                score = page_weights.get(
                     page["page"],
                     1
                 )
-                + int(year)
-            )
 
-            all_years.append(
-                (
-                    score,
-                    int(year)
+                all_years.append(
+                    (
+                        score,
+                        int(year)
+                    )
                 )
-            )
 
-    if all_years:
+        if all_years:
 
-        metadata["year"] = max(
-            all_years,
-            key=lambda x: x[0]
-        )[1]
+            metadata["year"] = max(
+                all_years,
+                key=lambda x: x[0]
+            )[1]
 
     return metadata
 
 import os
 
 
-def rename_file(old_path, new_filename):
+def rename_file(old_path, standard):
     """
-    Rename a PDF file using the generated filename.
-
-    Args:
-        old_path (str): Existing file path.
-        new_filename (str): New filename without extension.
+    Rename a PDF using standard.filename.
 
     Returns:
-        tuple:
-            (success, message)
+        tuple: (success, message)
     """
 
-    directory = os.path.dirname(old_path)
+    if not os.path.exists(old_path):
+        return (
+            False,
+            f"Source file does not exist: {old_path}"
+        )
+
+    if not old_path.lower().endswith(".pdf"):
+        return (
+            False,
+            "Source file is not a PDF"
+        )
+
+    if standard is None:
+        return (
+            False,
+            "No StandardData object supplied"
+        )
+
+    if not standard.filename:
+        return (
+            False,
+            "No generated filename"
+        )
 
     new_path = os.path.join(
         os.path.dirname(old_path),
-        new_filename.filename + ".pdf"
+        standard.filename + ".pdf"
     )
 
-    if old_path == new_path:
+    # normcase helps on Windows, where filenames are case-insensitive.
+    old_comparison = os.path.normcase(
+        os.path.abspath(old_path)
+    )
+
+    new_comparison = os.path.normcase(
+        os.path.abspath(new_path)
+    )
+
+    if old_comparison == new_comparison:
         return (
-            False,
+            True,
             "Already correctly named"
         )
 
