@@ -2,8 +2,12 @@ from pathlib import Path
 from processing import process_file
 import re
  
-test_file= Path(__file__).resolve().parents[1] / "Sample Documents" / "DLR_ENG_STD_ES102_2012.pdf"
-
+test_file = (
+    Path(__file__).resolve().parent.parent
+    / "Standards"
+    / "Sample Documents"
+    / "DLR_ENG_STD_ES102_2012.pdf"
+)
 def test_contains_DLR():
     standard = process_file(test_file)
 

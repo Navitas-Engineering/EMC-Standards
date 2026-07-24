@@ -1,10 +1,11 @@
 import os
 import pandas as pd
+from datetime import datetime
 
 from extraction import get_file_names
 from processing import process_file, test_single_file
 from extraction_continued import rename_file
-
+from pathlib import Path
 
 # ------------------------------------------------------------
 # Configuration
@@ -13,17 +14,51 @@ from extraction_continued import rename_file
 DRY_RUN = True
 EXPORT_RESULTS = True
 
-DIRECTORY = r"Standards\Test Docs" #Test directory is r"Standards\Test Docs" 
+# C:\Users\JoshuaDickens\Documents\Automation\Code
+CODE_DIRECTORY = Path(__file__).resolve().parent
 
-RESULTS_WORKBOOK = "RenameResults.xlsx"
+# C:\Users\JoshuaDickens\Documents\Automation
+AUTOMATION_DIRECTORY = CODE_DIRECTORY.parent
 
+# C:\Users\JoshuaDickens\Documents
+DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
+
+# C:\Users\JoshuaDickens\Documents\Target
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target" #Enter name of the folder containing the PDFs to be renamed here. 
+
+# Store the report inside Automation:
+# C:\Users\JoshuaDickens\Documents\Automation\RenameResults.xlsx
+RESULTS_WORKBOOK = (
+    AUTOMATION_DIRECTORY
+    / "RenameResults.xlsx"
+)
+
+print("Project locations:")
+print(f"  Code directory:   {CODE_DIRECTORY}")
+print(f"  Automation root:  {AUTOMATION_DIRECTORY}")
+print(f"  Target directory: {TARGET_DIRECTORY}")
+print(f"  Results workbook: {RESULTS_WORKBOOK}")
+print()
 
 # ------------------------------------------------------------
 # Processing
 # ------------------------------------------------------------
 
-sample_list = get_file_names(DIRECTORY)
+if not TARGET_DIRECTORY.exists():
+    raise FileNotFoundError(
+        "The target PDF directory could not be found:\n"
+        f"{TARGET_DIRECTORY}"
+    )
 
+if not TARGET_DIRECTORY.is_dir():
+    raise NotADirectoryError(
+        "The configured target path is not a directory:\n"
+        f"{TARGET_DIRECTORY}"
+    )
+
+sample_list = get_file_names(
+    str(TARGET_DIRECTORY)
+)
 results = []
 
 print("Found files:")
@@ -245,8 +280,8 @@ if EXPORT_RESULTS:
         )
 
     print(
-        f"\nResults exported to: "
-        f"{os.path.abspath(RESULTS_WORKBOOK)}"
+        "\nResults exported to: "
+        f"{RESULTS_WORKBOOK.resolve()}"
     )
 
 

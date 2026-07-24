@@ -2,9 +2,15 @@
 from pathlib import Path
 from extraction import extract_pages, score_candidates, choose_best_candidate, get_file_names
 
-root = Path(__file__).resolve().parents[1]
-test_file = root / "Sample Documents" / "DLR_ENG_STD_ES102_2012.pdf"
-test_dir = root / "Sample Documents"
+from pathlib import Path
+
+test_file = (
+        Path(__file__).resolve().parent.parent
+    / "Standards"
+    / "Sample Documents"
+    / "DLR_ENG_STD_ES102_2012.pdf"
+)
+test_dir = test_file.parent
 
 def test_extract_pages():
     pages = extract_pages(str(test_file))
