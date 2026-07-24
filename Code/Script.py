@@ -13,7 +13,7 @@ from extraction_continued import rename_file
 DRY_RUN = True
 EXPORT_RESULTS = True
 
-DIRECTORY = r"Test Docs"
+DIRECTORY = r"Standards\Test Docs" #Test directory is r"Standards\Test Docs" 
 
 RESULTS_WORKBOOK = "RenameResults.xlsx"
 
