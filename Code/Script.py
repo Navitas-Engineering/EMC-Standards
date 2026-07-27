@@ -7,6 +7,12 @@ from processing import process_file, test_single_file
 from extraction_continued import rename_file
 from pathlib import Path
 
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.utils import get_column_letter
+
 # ------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------
@@ -100,7 +106,10 @@ for file_path in sample_list:
                     f"Processing error: "
                     f"{type(error).__name__}: {error}"
                 ),
-                "Rename Result": "Not renamed"
+                "Rename Result": "Not renamed",
+                "Manual Decision": "",
+                "Approved Filename": "",
+                "Reviewer Notes": ""
             }
         )
 
@@ -246,8 +255,7 @@ if not final_list.empty:
 # Export results
 # ------------------------------------------------------------
 
-# As requested, export after a real run.
-if EXPORT_RESULTS:
+if EXPORT_RESULTS and not final_list.empty:
 
     summary = (
         final_list["Status"]
@@ -256,36 +264,460 @@ if EXPORT_RESULTS:
         .reset_index(name="Count")
     )
 
-    review_items = final_list[
-        final_list["Status"] != "SUCCESS"
-    ].copy()
+    def write_results_workbook(output_path):
+        """
+        Export results and apply Excel formatting, tables,
+        filters, and the manual-decision dropdown.
+        """
 
-    with pd.ExcelWriter(
-        RESULTS_WORKBOOK,
-        engine="openpyxl"
-    ) as writer:
+        # ----------------------------------------------------
+        # Write the raw worksheet data
+        # ----------------------------------------------------
 
-        final_list.to_excel(
-            writer,
-            sheet_name="All Results",
-            index=False
+        with pd.ExcelWriter(
+            output_path,
+            engine="openpyxl"
+        ) as writer:
+
+            final_list.to_excel(
+                writer,
+                sheet_name="All Results",
+                index=False
+            )
+
+            summary.to_excel(
+                writer,
+                sheet_name="Summary",
+                index=False
+            )
+
+        # ----------------------------------------------------
+        # Reopen with openpyxl to add Excel features
+        # ----------------------------------------------------
+
+        workbook = load_workbook(
+            output_path
         )
 
-        review_items.to_excel(
-            writer,
-            sheet_name="Review Required",
-            index=False
+        results_sheet = workbook[
+            "All Results"
+        ]
+
+        summary_sheet = workbook[
+            "Summary"
+        ]
+
+        # ----------------------------------------------------
+        # Convert All Results into an Excel table
+        # ----------------------------------------------------
+
+        if results_sheet.max_row >= 2:
+
+            results_table_reference = (
+                f"A1:"
+                f"{get_column_letter(results_sheet.max_column)}"
+                f"{results_sheet.max_row}"
+            )
+
+            results_table = Table(
+                displayName="tblRenameResults",
+                ref=results_table_reference
+            )
+
+            results_table_style = TableStyleInfo(
+                name="TableStyleMedium2",
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False
+            )
+
+            results_table.tableStyleInfo = (
+                results_table_style
+            )
+
+            results_sheet.add_table(
+                results_table
+            )
+
+        # ----------------------------------------------------
+        # Convert Summary into an Excel table
+        # ----------------------------------------------------
+
+        if summary_sheet.max_row >= 2:
+
+            summary_table_reference = (
+                f"A1:"
+                f"{get_column_letter(summary_sheet.max_column)}"
+                f"{summary_sheet.max_row}"
+            )
+
+            summary_table = Table(
+                displayName="tblRenameSummary",
+                ref=summary_table_reference
+            )
+
+            summary_table_style = TableStyleInfo(
+                name="TableStyleMedium4",
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False
+            )
+
+            summary_table.tableStyleInfo = (
+                summary_table_style
+            )
+
+            summary_sheet.add_table(
+                summary_table
+            )
+
+        # ----------------------------------------------------
+        # Freeze the heading row
+        # ----------------------------------------------------
+
+        results_sheet.freeze_panes = "A2"
+        summary_sheet.freeze_panes = "A2"
+
+        # ----------------------------------------------------
+        # Locate columns by heading
+        # ----------------------------------------------------
+
+        headers = {
+            cell.value: cell.column
+            for cell in results_sheet[1]
+        }
+
+        decision_column = headers.get(
+            "Manual Decision"
         )
 
-        summary.to_excel(
-            writer,
-            sheet_name="Summary",
-            index=False
+        approved_filename_column = headers.get(
+            "Approved Filename"
         )
+
+        reviewer_notes_column = headers.get(
+            "Reviewer Notes"
+        )
+
+        status_column = headers.get(
+            "Status"
+        )
+
+        reasons_column = headers.get(
+            "Reasons"
+        )
+
+        # ----------------------------------------------------
+        # Add APPROVE / REJECT / HOLD dropdown
+        # ----------------------------------------------------
+
+        if decision_column:
+
+            decision_validation = DataValidation(
+                type="list",
+                formula1='"APPROVE,REJECT,HOLD"',
+                allow_blank=True
+            )
+
+            decision_validation.error = (
+                "Choose APPROVE, REJECT, or HOLD."
+            )
+
+            decision_validation.errorTitle = (
+                "Invalid manual decision"
+            )
+
+            decision_validation.prompt = (
+                "Select APPROVE, REJECT, or HOLD."
+            )
+
+            decision_validation.promptTitle = (
+                "Manual review decision"
+            )
+
+            decision_validation.showErrorMessage = True
+            decision_validation.showInputMessage = True
+
+            results_sheet.add_data_validation(
+                decision_validation
+            )
+
+            decision_column_letter = (
+                get_column_letter(
+                    decision_column
+                )
+            )
+
+            # Apply the dropdown to all current result rows.
+            decision_validation.add(
+                f"{decision_column_letter}2:"
+                f"{decision_column_letter}"
+                f"{results_sheet.max_row}"
+            )
+
+        # ----------------------------------------------------
+        # Apply visual formatting to manual-review columns
+        # ----------------------------------------------------
+
+        manual_review_fill = PatternFill(
+            fill_type="solid",
+            fgColor="FFF2CC"
+        )
+
+        if decision_column:
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+                results_sheet.cell(
+                    row=row_number,
+                    column=decision_column
+                ).fill = manual_review_fill
+
+        if approved_filename_column:
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+                results_sheet.cell(
+                    row=row_number,
+                    column=approved_filename_column
+                ).fill = manual_review_fill
+
+        if reviewer_notes_column:
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+                results_sheet.cell(
+                    row=row_number,
+                    column=reviewer_notes_column
+                ).fill = manual_review_fill
+
+        # ----------------------------------------------------
+        # Highlight review and error statuses
+        # ----------------------------------------------------
+
+        review_fill = PatternFill(
+            fill_type="solid",
+            fgColor="FCE4D6"
+        )
+
+        no_candidate_fill = PatternFill(
+            fill_type="solid",
+            fgColor="F4CCCC"
+        )
+
+        success_fill = PatternFill(
+            fill_type="solid",
+            fgColor="E2F0D9"
+        )
+
+        if status_column:
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+
+                status_cell = results_sheet.cell(
+                    row=row_number,
+                    column=status_column
+                )
+
+                status_value = str(
+                    status_cell.value or ""
+                ).strip().upper()
+
+                if status_value == "SUCCESS":
+                    status_cell.fill = success_fill
+
+                elif status_value == "REVIEW_REQUIRED":
+                    status_cell.fill = review_fill
+
+                elif status_value == "NO_CANDIDATE":
+                    status_cell.fill = no_candidate_fill
+
+        # ----------------------------------------------------
+        # Wrap long text columns
+        # ----------------------------------------------------
+
+        wrap_columns = [
+            "Original File",
+            "Proposed Path",
+            "Reasons",
+            "Rename Result",
+            "Reviewer Notes"
+        ]
+
+        for heading in wrap_columns:
+
+            column_number = headers.get(
+                heading
+            )
+
+            if not column_number:
+                continue
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+                results_sheet.cell(
+                    row=row_number,
+                    column=column_number
+                ).alignment = Alignment(
+                    wrap_text=True,
+                    vertical="top"
+                )
+
+        # ----------------------------------------------------
+        # Set sensible column widths
+        # ----------------------------------------------------
+
+        preferred_widths = {
+            "Original File": 45,
+            "Source Filename": 35,
+            "Filename Hint Code": 28,
+            "Filename Hint Year": 18,
+            "Filename Hint Amendment": 22,
+            "Filename Hint Amendment Year": 26,
+            "Raw Code": 24,
+            "Normalised Code": 28,
+            "Extracted Year": 16,
+            "Amendment": 14,
+            "Amendment Year": 18,
+            "Score": 12,
+            "Extracted Text Length": 22,
+            "Generated Filename": 38,
+            "Proposed Path": 50,
+            "Status": 20,
+            "Reasons": 50,
+            "Rename Result": 35,
+            "Manual Decision": 20,
+            "Approved Filename": 38,
+            "Reviewer Notes": 50
+        }
+
+        for heading, width in preferred_widths.items():
+
+            column_number = headers.get(
+                heading
+            )
+
+            if column_number:
+
+                results_sheet.column_dimensions[
+                    get_column_letter(
+                        column_number
+                    )
+                ].width = width
+
+        summary_sheet.column_dimensions["A"].width = 24
+        summary_sheet.column_dimensions["B"].width = 12
+
+        # ----------------------------------------------------
+        # Improve header appearance
+        # ----------------------------------------------------
+
+        for cell in results_sheet[1]:
+            cell.font = Font(
+                bold=True,
+                color="FFFFFF"
+            )
+
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True
+            )
+
+        results_sheet.row_dimensions[1].height = 32
+
+        for cell in summary_sheet[1]:
+            cell.font = Font(
+                bold=True,
+                color="FFFFFF"
+            )
+
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center"
+            )
+
+        summary_sheet.row_dimensions[1].height = 24
+
+        # ----------------------------------------------------
+        # Save completed workbook
+        # ----------------------------------------------------
+
+        workbook.save(
+            output_path
+        )
+
+    try:
+
+        write_results_workbook(
+            RESULTS_WORKBOOK
+        )
+
+        print(
+            "\nResults exported to:"
+        )
+
+        print(
+            f"  {RESULTS_WORKBOOK.resolve()}"
+        )
+
+    except PermissionError:
+
+        fallback_timestamp = (
+            datetime.now().strftime(
+                "%y-%m-%d_%H-%M-%S"
+            )
+        )
+
+        fallback_workbook = (
+            AUTOMATION_DIRECTORY
+            / f"RenameResults_{fallback_timestamp}.xlsx"
+        )
+
+        write_results_workbook(
+            fallback_workbook
+        )
+
+        print(
+            "\nThe main workbook could not be overwritten."
+        )
+
+        print(
+            "It may currently be open in Excel."
+        )
+
+        print(
+            "\nResults were saved instead to:"
+        )
+
+        print(
+            f"  {fallback_workbook.resolve()}"
+        )
+
+elif not EXPORT_RESULTS:
 
     print(
-        "\nResults exported to: "
-        f"{RESULTS_WORKBOOK.resolve()}"
+        "\nEXPORT_RESULTS is disabled. "
+        "No workbook was created."
+    )
+
+else:
+
+    print(
+        "\nThere were no results to export."
     )
 
 
