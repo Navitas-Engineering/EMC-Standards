@@ -109,7 +109,8 @@ for file_path in sample_list:
                 "Rename Result": "Not renamed",
                 "Manual Decision": "",
                 "Approved Filename": "",
-                "Reviewer Notes": ""
+                "Reviewer Notes": "",
+                "Open File": ""
             }
         )
 
@@ -224,7 +225,8 @@ for file_path in sample_list:
             "Rename Result": rename_result,
             "Manual Decision": "", #"Approve", "Reject", "Hold"
             "Approved Filename": "", #Leave blank if approved, othewise enter the filename to be used if different from the generated filename.
-            "Reviewer Notes": ""
+            "Reviewer Notes": "",
+            "Open File": ""
 
         }
     )
@@ -408,6 +410,131 @@ if EXPORT_RESULTS and not final_list.empty:
         reasons_column = headers.get(
             "Reasons"
         )
+
+        original_file_column = headers.get(
+            "Original File"
+        )
+
+        proposed_path_column = headers.get(
+            "Proposed Path"
+        )
+
+        open_file_column = headers.get(
+            "Open File"
+        )
+
+        # ----------------------------------------------------
+        # Add relative Open File hyperlinks
+        # ----------------------------------------------------
+
+        if (
+            original_file_column
+            and open_file_column
+        ):
+
+            workbook_directory = Path(
+                output_path
+            ).resolve().parent
+
+            for row_number in range(
+                2,
+                results_sheet.max_row + 1
+            ):
+
+                original_file_value = results_sheet.cell(
+                    row=row_number,
+                    column=original_file_column
+                ).value
+
+                proposed_path_value = None
+
+                if proposed_path_column:
+                    proposed_path_value = results_sheet.cell(
+                        row=row_number,
+                        column=proposed_path_column
+                    ).value
+
+                original_path = None
+                proposed_path = None
+
+                if original_file_value:
+                    original_path = Path(
+                        str(original_file_value)
+                    )
+
+                if proposed_path_value:
+                    proposed_path = Path(
+                        str(proposed_path_value)
+                    )
+
+                # After a successful real rename, the proposed
+                # destination should exist.
+                if (
+                    proposed_path is not None
+                    and proposed_path.exists()
+                ):
+                    file_to_open = proposed_path
+
+                # During a dry run, or for a file not renamed,
+                # the original source should still exist.
+                elif (
+                    original_path is not None
+                    and original_path.exists()
+                ):
+                    file_to_open = original_path
+
+                else:
+                    file_to_open = None
+
+                open_file_cell = results_sheet.cell(
+                    row=row_number,
+                    column=open_file_column
+                )
+
+                if file_to_open is None:
+                    open_file_cell.value = "File not found"
+
+                    open_file_cell.alignment = Alignment(
+                        horizontal="center",
+                        vertical="center"
+                    )
+
+                else:
+                    try:
+                        relative_path = os.path.relpath(
+                            file_to_open.resolve(),
+                            start=workbook_directory
+                        )
+
+                        relative_link = relative_path.replace(
+                            "\\",
+                            "/"
+                        )
+
+                        open_file_cell.value = "Open File"
+
+                        open_file_cell.hyperlink = (
+                            f"file:{relative_link}"
+                        )
+
+                        open_file_cell.style = "Hyperlink"
+
+                        open_file_cell.alignment = Alignment(
+                            horizontal="center",
+                            vertical="center"
+                        )
+
+                    except ValueError:
+                        # Usually means the workbook and the PDF
+                        # are located on different Windows drives.
+                        open_file_cell.value = (
+                            "Relative link unavailable"
+                        )
+
+                        open_file_cell.alignment = Alignment(
+                            horizontal="center",
+                            vertical="center"
+                        )
 
         # ----------------------------------------------------
         # Add APPROVE / REJECT / HOLD dropdown
@@ -601,7 +728,8 @@ if EXPORT_RESULTS and not final_list.empty:
             "Rename Result": 35,
             "Manual Decision": 20,
             "Approved Filename": 38,
-            "Reviewer Notes": 50
+            "Reviewer Notes": 50,
+            "Open File": 14
         }
 
         for heading, width in preferred_widths.items():
