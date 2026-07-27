@@ -30,7 +30,7 @@ TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target" #Enter name of the folder cont
 # C:\Users\JoshuaDickens\Documents\Automation\RenameResults.xlsx
 RESULTS_WORKBOOK = (
     AUTOMATION_DIRECTORY
-    / "RenameResults.xlsx"
+    / f"RenameResults_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
 )
 
 print("Project locations:")
@@ -212,7 +212,11 @@ for file_path in sample_list:
             "Proposed Path": proposed_path,
             "Status": standard.status,
             "Reasons": standard.reasons_text(),
-            "Rename Result": rename_result
+            "Rename Result": rename_result,
+            "Manual Decision": "", #"Approve", "Reject", "Hold"
+            "Approved Filename": "", #Leave blank if approved, othewise enter the filename to be used if different from the generated filename.
+            "Reviewer Notes": ""
+
         }
     )
 
