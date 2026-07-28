@@ -2,6 +2,7 @@ import fitz
 import re
 import os
 from collections import defaultdict
+from pathlib import Path
 import numpy as np
 
 from utils import StandardData
@@ -18,6 +19,7 @@ KNOWN_PREFIXES = {
     "DLR",
     "BR",
     "GEGN",
+    "GLGN",
     "BS",
     "S",
     "EVS", 
@@ -101,7 +103,9 @@ def find_candidates(page_text):
 
     patterns = [
 
-        r'\bGEGN\d+\b',
+        r'\b(?:GE|GL)[\s/_-]*GN[\s/_-]*\d+\b',
+
+        r'\bGLGN\d+\b',
 
         r'\bBR\s+\d+\b',
 
@@ -145,6 +149,41 @@ def find_candidates(page_text):
 
     return candidates
 
+def canonicalise_candidate(candidate):
+    """
+    Canonicalise equivalent GEGN and GLGN candidate spellings before
+    candidates are scored.
+
+    Examples:
+        GEGN8646       -> GEGN 8646
+        GE/GN/8646     -> GEGN 8646
+        GE_GN_8646     -> GEGN 8646
+        GE GN 8646     -> GEGN 8646
+
+        GLGN1620       -> GLGN 1620
+        GL/GN/1620     -> GLGN 1620
+    """
+
+    candidate = candidate.strip().upper()
+
+    guidance_match = re.fullmatch(
+        r"(GE|GL)"
+        r"[\s/_-]*"
+        r"GN"
+        r"[\s/_-]*"
+        r"(\d+)",
+        candidate,
+        re.IGNORECASE
+    )
+
+    if guidance_match:
+        prefix = guidance_match.group(1).upper()
+        number = guidance_match.group(2)
+
+        return f"{prefix}GN {number}"
+
+    return candidate
+
 def score_candidates(pages):
     """Score candidate strings based on their occurrence and characteristics in the extracted pages.
     
@@ -173,7 +212,7 @@ def score_candidates(pages):
         )
 
         for candidate, position in candidates:
-            candidate = candidate.strip().upper()
+            candidate = canonicalise_candidate(candidate)
 
             if is_junk_candidate(candidate):
                 continue
@@ -291,18 +330,46 @@ def choose_best_candidate(scores):
         score=score
     )
 
-def get_file_names(directory):
+def get_file_names(directory, rejected_directory=None):
+    """
+    Recursively find PDF files below directory.
+
+    The configured Rejected directory is excluded from discovery.
+    Other subfolders, including Hold, remain eligible for scanning.
+    """
 
     file_names = []
 
-    for root, dirs, files in os.walk(directory):
+    root_directory = Path(directory).resolve()
+
+    rejected_path = None
+
+    if rejected_directory is not None:
+        rejected_path = Path(
+            rejected_directory
+        ).resolve()
+
+    for root, dirs, files in os.walk(root_directory):
+        root_path = Path(root).resolve()
+
+        # Modify dirs in place so os.walk does not descend into
+        # the configured Rejected directory.
+        dirs[:] = [
+            directory_name
+            for directory_name in dirs
+            if (
+                rejected_path is None
+                or (
+                    root_path
+                    / directory_name
+                ).resolve() != rejected_path
+            )
+        ]
 
         for file in files:
-
             if file.lower().endswith(".pdf"):
-
                 file_names.append(
-                    os.path.join(root, file)
+                    str(root_path / file)
                 )
 
     return file_names

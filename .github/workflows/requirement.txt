@@ -1,0 +1,6 @@
+pandas
+pymupdf
+openpyxl
+numpy
+pytest
+flake8

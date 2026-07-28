@@ -4,6 +4,18 @@ def normalise_code(code):
 
     code = code.strip().upper()
 
+    # Keep GEGN and GLGN as one prefix block.
+    #
+    # Examples:
+    # GE/GN/8646 -> GEGN 8646
+    # GE_GN_8646 -> GEGN 8646
+    # GL/GN/1620 -> GLGN 1620
+    code = re.sub(
+        r"^(GE|GL)[\s/_-]*GN[\s/_-]*(\d+)$",
+        r"\1GN \2",
+        code
+    )
+
     # BS EN -> EN
     code = re.sub(
         r'^BS\s+EN\s+',
@@ -12,9 +24,10 @@ def normalise_code(code):
     )
 
     # GEGN8646 -> GEGN 8646
+    # GLGN1620 -> GLGN 1620
     code = re.sub(
-        r'^(GEGN)(\d+)$',
-        r'\1 \2',
+        r"^(GEGN|GLGN)(\d+)$",
+        r"\1 \2",
         code
     )
 

@@ -1,11 +1,13 @@
 import os
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
+from getpass import getuser
 
 from extraction import get_file_names
 from processing import process_file, test_single_file
 from extraction_continued import rename_file
-from pathlib import Path
+
 
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -20,11 +22,21 @@ from openpyxl.utils import get_column_letter
 DRY_RUN = True
 EXPORT_RESULTS = True
 
+#Timestamp for workbook filename is generated automatically, so that multiple runs do not overwrite each other.
+# Store the actual datetime object so callers can use .strftime() safely.
+RUN_STARTED_AT = datetime.now()
+CURRENT_USER = getuser()
+
 # C:\Users\JoshuaDickens\Documents\Automation\Code
 CODE_DIRECTORY = Path(__file__).resolve().parent
 
 # C:\Users\JoshuaDickens\Documents\Automation
 AUTOMATION_DIRECTORY = CODE_DIRECTORY.parent
+
+REPORTS_DIRECTORY = (
+    AUTOMATION_DIRECTORY
+    / "Reports"
+)
 
 # C:\Users\JoshuaDickens\Documents
 DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
@@ -32,11 +44,20 @@ DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
 # C:\Users\JoshuaDickens\Documents\Target
 TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target" #Enter name of the folder containing the PDFs to be renamed here. 
 
+REJECTED_DIRECTORY = (
+    TARGET_DIRECTORY
+    / "Rejected"
+)
+
 # Store the report inside Automation:
 # C:\Users\JoshuaDickens\Documents\Automation\RenameResults.xlsx
 RESULTS_WORKBOOK = (
-    AUTOMATION_DIRECTORY
-    / f"RenameResults_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    REPORTS_DIRECTORY
+    / (
+        "RenameResults_"
+        f"{RUN_STARTED_AT.strftime('%Y-%m-%d_%H-%M-%S')}"
+        ".xlsx"
+    )
 )
 
 print("Project locations:")
@@ -44,6 +65,9 @@ print(f"  Code directory:   {CODE_DIRECTORY}")
 print(f"  Automation root:  {AUTOMATION_DIRECTORY}")
 print(f"  Target directory: {TARGET_DIRECTORY}")
 print(f"  Results workbook: {RESULTS_WORKBOOK}")
+print(f"  Rejected folder:   {REJECTED_DIRECTORY}")
+print(f"  Run started:       {RUN_STARTED_AT}")
+print(f"  Created by:        {CURRENT_USER}")
 print()
 
 # ------------------------------------------------------------
@@ -62,8 +86,14 @@ if not TARGET_DIRECTORY.is_dir():
         f"{TARGET_DIRECTORY}"
     )
 
+REPORTS_DIRECTORY.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
 sample_list = get_file_names(
-    str(TARGET_DIRECTORY)
+    directory=TARGET_DIRECTORY,
+    rejected_directory=REJECTED_DIRECTORY
 )
 results = []
 
@@ -92,6 +122,8 @@ for file_path in sample_list:
                 "Source Filename": os.path.basename(file_path),
                 "Filename Hint Code": None,
                 "Filename Hint Year": None,
+                "Filename Hint Amendment": None,
+                "Filename Hint Amendment Year": None,
                 "Raw Code": None,
                 "Normalised Code": None,
                 "Extracted Year": None,
@@ -107,10 +139,14 @@ for file_path in sample_list:
                     f"{type(error).__name__}: {error}"
                 ),
                 "Rename Result": "Not renamed",
+                "Open File": "",
                 "Manual Decision": "",
                 "Approved Filename": "",
                 "Reviewer Notes": "",
-                "Open File": ""
+                "Approval Result": "",
+                "Approved By": "",
+                "Approved At": "",
+                "Final Path": ""
             }
         )
 
@@ -223,11 +259,14 @@ for file_path in sample_list:
             "Status": standard.status,
             "Reasons": standard.reasons_text(),
             "Rename Result": rename_result,
-            "Manual Decision": "", #"Approve", "Reject", "Hold"
-            "Approved Filename": "", #Leave blank if approved, othewise enter the filename to be used if different from the generated filename.
+            "Open File": "",
+            "Manual Decision": "",
+            "Approved Filename": "",
             "Reviewer Notes": "",
-            "Open File": ""
-
+            "Approval Result": "",
+            "Approved By": "",
+            "Approved At": "",
+            "Final Path": ""
         }
     )
 
@@ -266,6 +305,36 @@ if EXPORT_RESULTS and not final_list.empty:
         .reset_index(name="Count")
     )
 
+    status_counts = (
+        final_list["Status"]
+        .value_counts(dropna=False)
+        .to_dict()
+    )
+
+    audit_details = (
+        f"Processed={len(final_list)}; "
+        f"SUCCESS={status_counts.get('SUCCESS', 0)}; "
+        f"REVIEW_REQUIRED="
+        f"{status_counts.get('REVIEW_REQUIRED', 0)}; "
+        f"NO_CANDIDATE="
+        f"{status_counts.get('NO_CANDIDATE', 0)}; "
+        f"Target={TARGET_DIRECTORY}"
+    )
+
+    audit_log = pd.DataFrame(
+        [
+            {
+                "Timestamp": RUN_STARTED_AT
+                ,
+                "Event": "PROCESSING_RUN",
+                "User": CURRENT_USER,
+                "Dry Run": DRY_RUN,
+                "Script": "Script.py",
+                "Details": audit_details
+            }
+        ]
+    )
+
     def write_results_workbook(output_path):
         """
         Export results and apply Excel formatting, tables,
@@ -293,6 +362,12 @@ if EXPORT_RESULTS and not final_list.empty:
                 index=False
             )
 
+            audit_log.to_excel(
+                writer,
+                sheet_name="Audit Log",
+                index=False
+            )
+
         # ----------------------------------------------------
         # Reopen with openpyxl to add Excel features
         # ----------------------------------------------------
@@ -307,6 +382,10 @@ if EXPORT_RESULTS and not final_list.empty:
 
         summary_sheet = workbook[
             "Summary"
+        ]
+
+        audit_sheet = workbook[
+            "Audit Log"
         ]
 
         # ----------------------------------------------------
@@ -376,11 +455,45 @@ if EXPORT_RESULTS and not final_list.empty:
             )
 
         # ----------------------------------------------------
+        # Convert Audit Log into an Excel table
+        # ----------------------------------------------------
+
+        if audit_sheet.max_row >= 2:
+
+            audit_table_reference = (
+                f"A1:"
+                f"{get_column_letter(audit_sheet.max_column)}"
+                f"{audit_sheet.max_row}"
+            )
+
+            audit_table = Table(
+                displayName="tblAuditLog",
+                ref=audit_table_reference
+            )
+
+            audit_table_style = TableStyleInfo(
+                name="TableStyleMedium9",
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False
+            )
+
+            audit_table.tableStyleInfo = (
+                audit_table_style
+            )
+
+            audit_sheet.add_table(
+                audit_table
+            )
+
+        # ----------------------------------------------------
         # Freeze the heading row
         # ----------------------------------------------------
 
         results_sheet.freeze_panes = "A2"
         summary_sheet.freeze_panes = "A2"
+        audit_sheet.freeze_panes = "A2"
 
         # ----------------------------------------------------
         # Locate columns by heading
@@ -679,7 +792,9 @@ if EXPORT_RESULTS and not final_list.empty:
             "Proposed Path",
             "Reasons",
             "Rename Result",
-            "Reviewer Notes"
+            "Reviewer Notes",
+            "Approval Result",
+            "Final Path"
         ]
 
         for heading in wrap_columns:
@@ -729,7 +844,11 @@ if EXPORT_RESULTS and not final_list.empty:
             "Manual Decision": 20,
             "Approved Filename": 38,
             "Reviewer Notes": 50,
-            "Open File": 14
+            "Open File": 14,
+            "Approval Result": 45,
+            "Approved By": 22,
+            "Approved At": 22,
+            "Final Path": 50
         }
 
         for heading, width in preferred_widths.items():
@@ -781,6 +900,50 @@ if EXPORT_RESULTS and not final_list.empty:
         summary_sheet.row_dimensions[1].height = 24
 
         # ----------------------------------------------------
+        # Format Audit Log
+        # ----------------------------------------------------
+
+        audit_widths = {
+            "A": 22,
+            "B": 22,
+            "C": 22,
+            "D": 12,
+            "E": 24,
+            "F": 80
+        }
+
+        for column_letter, width in audit_widths.items():
+            audit_sheet.column_dimensions[
+                column_letter
+            ].width = width
+
+        for cell in audit_sheet[1]:
+            cell.font = Font(
+                bold=True,
+                color="FFFFFF"
+            )
+
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True
+            )
+
+        audit_sheet.row_dimensions[1].height = 28
+
+        for row_number in range(
+            2,
+            audit_sheet.max_row + 1
+        ):
+            audit_sheet.cell(
+                row=row_number,
+                column=6
+            ).alignment = Alignment(
+                wrap_text=True,
+                vertical="top"
+            )
+
+        # ----------------------------------------------------
         # Save completed workbook
         # ----------------------------------------------------
 
@@ -811,7 +974,7 @@ if EXPORT_RESULTS and not final_list.empty:
         )
 
         fallback_workbook = (
-            AUTOMATION_DIRECTORY
+            REPORTS_DIRECTORY
             / f"RenameResults_{fallback_timestamp}.xlsx"
         )
 

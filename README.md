@@ -1,89 +1,361 @@
 # Standards PDF Catalogue Automation
 
-A Python tool for analysing, validating, reporting, and safely renaming technical standards PDFs so they follow an existing standards-library naming convention.
+A Python tool for analysing, validating, reporting, and safely renaming technical-standards PDFs so they follow a consistent library naming convention.
 
-The project has two controlled stages:
+The project uses two controlled stages:
 
 1. **Automatic processing** with `Script.py`.
-2. **Manual approval processing** with `Rename_Approval.py`.
+2. **Manual review and approval processing** with `Rename_Approval.py`.
 
-> **Current stage:** Beta refinement and dry-run validation  
-> **Recommended starting settings:** `DRY_RUN = True` in both scripts and `EXPORT_RESULTS = True` in `Script.py`.
+The system is designed to automate straightforward records while keeping uncertain results in a controlled human-review workflow. The current filename is treated as supporting evidence only; it never automatically overrides metadata extracted from the PDF.
+
+> **Project stage:** Beta refinement and controlled testing  
+> **Recommended development settings:** `DRY_RUN = True` in both scripts and `EXPORT_RESULTS = True` in `Script.py`.
 
 ---
 
 ## Contents
 
+- [Project objectives](#project-objectives)
 - [Folder structure](#folder-structure)
-- [Project purpose](#project-purpose)
 - [Requirements](#requirements)
+- [Installation](#installation)
 - [Configuration and paths](#configuration-and-paths)
 - [Project files](#project-files)
+- [Library naming convention](#library-naming-convention)
 - [Automatic processing workflow](#automatic-processing-workflow)
+- [Candidate detection and normalisation](#candidate-detection-and-normalisation)
 - [Automatic statuses](#automatic-statuses)
-- [Excel report](#excel-report)
-- [Manual review columns](#manual-review-columns)
-- [Manual decisions](#manual-decisions)
-- [Manual approval workflow](#manual-approval-workflow)
+- [Excel review reports](#excel-review-reports)
+- [Manual review workflow](#manual-review-workflow)
+- [Approval behaviour](#approval-behaviour)
+- [Repeated approval runs](#repeated-approval-runs)
+- [Filesystem safety](#filesystem-safety)
 - [Running the scripts](#running-the-scripts)
-- [Rename safety](#rename-safety)
+- [Automated tests](#automated-tests)
+- [GitHub Actions](#github-actions)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Recommended operating procedure](#recommended-operating-procedure)
+- [Future improvements](#future-improvements)
+
+---
+
+## Project objectives
+
+The tool is designed to:
+
+- discover PDFs recursively below a configurable designated folder;
+- ignore PDFs already moved into the configured `Rejected` folder;
+- continue scanning PDFs in `Hold` because they may still require clarification;
+- extract text from the first pages of each PDF using PyMuPDF;
+- detect and score possible technical-standard designations;
+- normalise selected codes into the library naming convention;
+- extract publication years, amendments, and amendment years;
+- use the existing filename as a validation hint rather than a source of truth;
+- automatically rename only results that pass the current validation rules;
+- produce a unique, timestamped Excel report for every processing run;
+- record who created each report and whether the run was a dry run;
+- support manual `APPROVE`, `REJECT`, and `HOLD` decisions;
+- write real approval outcomes back into the same workbook;
+- retain previous reports as a permanent audit history;
+- keep every filesystem-changing operation dry-run safe.
+
+The aim is not perfect extraction from every PDF. The aim is a safe and explainable bulk-cataloguing process that automates high-confidence documents and exposes uncertain documents for review.
 
 ---
 
 ## Folder structure
 
-The code folder and target folder are kept separately beneath the same parent location:
+A typical development layout is:
 
 ```text
-C:\Users\JoshuaDickens\Documents\
-|
-|-- Automation\
-|   |-- Code\
-|   |   |-- Script.py
-|   |   |-- Rename_Approval.py
-|   |   |-- extraction.py
-|   |   |-- extraction_continued.py
-|   |   |-- filename_hint.py
-|   |   |-- processing.py
-|   |   |-- utils.py
-|   |   |-- validate_standard.py
-|   |   `-- README.md
-|   |
-|   `-- RenameResults_YYYY-MM-DD.xlsx
-|
-`-- Target\
-    |-- standard1.pdf
-    |-- standard2.pdf
-    `-- subfolders\
-        `-- additional-standard.pdf
+Documents\
+├── Automation\
+│   ├── Code\
+│   │   ├── Script.py
+│   │   ├── Rename_Approval.py
+│   │   ├── extraction.py
+│   │   ├── extraction_continued.py
+│   │   ├── filename_hint.py
+│   │   ├── processing.py
+│   │   ├── validate_standard.py
+│   │   ├── utils.py
+│   │   └── README.md
+│   ├── Reports\
+│   │   └── RenameResults_YYYY-MM-DD_HH-MM-SS.xlsx
+│   └── Tests\
+│       ├── conftest.py
+│       ├── test_extraction.py
+│       ├── test_file_discovery.py
+│       ├── test_normalisation.py
+│       └── test_processing_integration.py
+└── Target\
+    ├── PDF files
+    ├── Rejected\
+    └── Hold\
 ```
 
-The target scan is recursive, so PDFs can be stored directly in `Target` or in its subfolders.
+`Target` is a testing placeholder. In deployment, both scripts must point to the same designated standards folder, for example:
 
-The paths are calculated from the location of each Python script. The program therefore does not depend on the folder from which PowerShell or Visual Studio Code was opened.
+```python
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Dropbox Standards"
+```
+
+Paths are derived relative to the script location using `pathlib`, so the program does not depend on the directory from which PowerShell or Visual Studio Code was opened.
+
+### Special subfolder behaviour
+
+- **`Rejected`** contains documents that should not be stored in the standards library, such as letters, research documents, unrelated publications, or other unsuitable material. It is excluded from future PDF discovery.
+- **`Hold`** contains documents awaiting clarification. It remains included in future scans.
+
+Only the specifically configured `Rejected` path is excluded. An unrelated folder with the same name elsewhere in the tree is not globally excluded.
 
 ---
 
-## Project purpose
+## Requirements
 
-The tool is designed to:
+- Python 3.10 or later
+- pandas
+- PyMuPDF
+- openpyxl
+- NumPy
+- pytest
+- flake8
 
-- discover all PDFs below a chosen target folder;
-- extract text from the first pages using PyMuPDF;
-- detect and score possible technical-standard codes;
-- select and normalise the best candidate;
-- extract the publication year, amendment, and amendment year;
-- use the current filename as a supporting validation hint;
-- build a proposed filename in the library convention;
-- prevent uncertain results from being renamed automatically;
-- export a formatted Excel review report;
-- automatically rename validated `SUCCESS` records when enabled;
-- allow manually reviewed exceptions to be renamed separately.
+The project is currently developed locally with Python 3.14 and tested in GitHub Actions with Python 3.10.
 
-The aim is not perfect automation. The aim is a reliable bulk-cataloguing helper that automates straightforward files and clearly identifies exceptions.
+---
+
+## Installation
+
+A root-level `requirements.txt` is recommended:
+
+```text
+pandas
+pymupdf
+openpyxl
+numpy
+pytest
+flake8
+```
+
+Install dependencies with the same Python interpreter that will run the scripts:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Using an explicit interpreter:
+
+```powershell
+& "C:\Users\JoshuaDickens\AppData\Local\Programs\Python\Python314\python.exe" -m pip install -r requirements.txt
+```
+
+The Excel package is named `openpyxl`, ending with a lowercase letter `l`, not the number `1`.
+
+---
+
+## Configuration and paths
+
+### Main processor
+
+The main configuration in `Script.py` includes:
+
+```python
+DRY_RUN = True
+EXPORT_RESULTS = True
+
+RUN_STARTED_AT = datetime.now()
+CURRENT_USER = getuser()
+
+CODE_DIRECTORY = Path(__file__).resolve().parent
+AUTOMATION_DIRECTORY = CODE_DIRECTORY.parent
+DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
+REPORTS_DIRECTORY = AUTOMATION_DIRECTORY / "Reports"
+
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
+REJECTED_DIRECTORY = TARGET_DIRECTORY / "Rejected"
+
+RESULTS_WORKBOOK = (
+    REPORTS_DIRECTORY
+    / (
+        "RenameResults_"
+        f"{RUN_STARTED_AT.strftime('%Y-%m-%d_%H-%M-%S')}"
+        ".xlsx"
+    )
+)
+```
+
+`RUN_STARTED_AT` is captured once so the filename and report audit entry use one consistent timestamp.
+
+`Script.py` creates `REPORTS_DIRECTORY` when required:
+
+```python
+REPORTS_DIRECTORY.mkdir(
+    parents=True,
+    exist_ok=True
+)
+```
+
+### Approval processor
+
+`Rename_Approval.py` must use the same designated target folder:
+
+```python
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
+REJECTED_DIRECTORY = TARGET_DIRECTORY / "Rejected"
+HOLD_DIRECTORY = TARGET_DIRECTORY / "Hold"
+REPORTS_DIRECTORY = AUTOMATION_DIRECTORY / "Reports"
+```
+
+The default workbook selection is:
+
+```python
+RESULTS_WORKBOOK_OVERRIDE = None
+```
+
+When the value is `None`, the approval script selects the report with the newest timestamp embedded in a filename matching:
+
+```text
+RenameResults_YYYY-MM-DD_HH-MM-SS.xlsx
+```
+
+To process a specific report, set an explicit override:
+
+```python
+RESULTS_WORKBOOK_OVERRIDE = (
+    REPORTS_DIRECTORY
+    / "RenameResults_2026-07-28_13-45-00.xlsx"
+)
+```
+
+The selected workbook and selection reason are printed before processing begins.
+
+### User identification
+
+Both scripts obtain the current operating-system username automatically:
+
+```python
+from getpass import getuser
+
+CURRENT_USER = getuser()
+```
+
+No manually maintained user-name setting is required.
+
+---
+
+## Project files
+
+### `Script.py`
+
+The main application entry point. It:
+
+- resolves project paths;
+- validates the configured target directory;
+- creates the reports directory where necessary;
+- recursively discovers eligible PDFs;
+- excludes the configured `Rejected` folder;
+- processes each PDF independently;
+- catches per-file processing exceptions;
+- previews or performs automatic `SUCCESS` renames;
+- creates a timestamped Excel report;
+- records the creator and dry-run state;
+- formats the workbook with tables, filters, colours, widths, hyperlinks, and review controls.
+
+### `Rename_Approval.py`
+
+The controlled manual-decision processor. It:
+
+- selects the newest timestamped report unless overridden;
+- reads the `All Results` worksheet;
+- validates required columns;
+- processes `APPROVE`, `REJECT`, and `HOLD` decisions;
+- follows `Final Path` for documents previously moved to `Hold`;
+- moves approved held files out of `Hold` and back into the main target directory;
+- moves rejected files into `Rejected`;
+- writes real, non-dry-run outcomes into the same workbook;
+- appends an approval-run entry to `Audit Log`;
+- prevents already completed approvals or rejections from being repeated.
+
+### `extraction.py`
+
+Responsible for:
+
+- extracting text from the first pages of a PDF;
+- finding possible designation candidates;
+- canonicalising equivalent candidate forms;
+- scoring candidates;
+- choosing the highest-scoring candidate;
+- recursively discovering PDFs.
+
+Important functions include:
+
+```python
+extract_pages(file_path)
+find_candidates(page_text)
+canonicalise_candidate(candidate)
+score_candidates(pages)
+choose_best_candidate(scores)
+get_file_names(directory, rejected_directory=None)
+```
+
+### `extraction_continued.py`
+
+Responsible for:
+
+- normalising selected standard codes;
+- extracting publication and amendment metadata;
+- constructing generated filenames;
+- performing automatic renames.
+
+Important functions include:
+
+```python
+normalise_code(code)
+extract_designation_metadata(pages, raw_code)
+build_filename(metadata)
+rename_file(old_path, standard)
+```
+
+### `filename_hint.py`
+
+Extracts useful hints from the existing filename and supports tolerant comparison between the existing filename and the extracted designation.
+
+The existing filename is never used to silently replace extracted metadata.
+
+### `processing.py`
+
+Runs the full processing pipeline for one PDF and returns a `StandardData` object even when no candidate is found.
+
+Important functions:
+
+```python
+process_file(file_path)
+test_single_file(file_path)
+```
+
+### `validate_standard.py`
+
+Applies validation rules, assigns the automatic status, and records human-readable review reasons.
+
+### `utils.py`
+
+Contains the `StandardData` class used to pass extraction, filename, validation, path, status, and reason information through the pipeline.
+
+### `Tests`
+
+Contains synthetic unit tests and real-PDF integration tests for:
+
+- GEGN and GLGN candidate canonicalisation;
+- code normalisation;
+- filename construction;
+- protection of existing code formats;
+- `Rejected` exclusion;
+- continued `Hold` discovery;
+- real DLR document processing.
 
 ---
 
@@ -96,12 +368,12 @@ BR_13422_1978
 DLR_ENG_STD_ES102_2012
 EN_12015_2004
 EN_50121-3-2_2015
-EN_55032_2015
 EN_55032_2015_A11_2020
 IEC_61439-1_2021
 IEC_62271-1_2017_ISH_2021
 IEC_61000-4-7_2002_A1_2009
 GEGN_8646_2017
+GLGN_1620_2024
 GE_RT_8270_2007
 GM_RC_1500_1994
 NR_L2_ELP_27716-01_2023
@@ -113,9 +385,10 @@ General rules:
 - slashes normally become underscores;
 - hyphens within multipart standard numbers are preserved;
 - `BS EN` is stored as `EN`;
-- publication year follows the normalised code;
+- the publication year follows the normalised code;
 - amendments follow the publication year;
-- interpretation sheets use `ISH` followed by their year.
+- interpretation sheets use `ISH` followed by their year;
+- `GEGN` and `GLGN` remain single prefix blocks.
 
 Examples:
 
@@ -129,213 +402,41 @@ BS EN 55032:2015+A11:2020
 IEC 62271-1:2017/ISH1:2021
 -> IEC_62271-1_2017_ISH_2021
 
-GM/RC1500
--> GM_RC_1500_1994
+GE/GN/8646
+-> GEGN_8646
+
+GL/GN/1620
+-> GLGN_1620
+
+GE/RT/8270
+-> GE_RT_8270
 
 NR/L2/ELP/27716/01
--> NR_L2_ELP_27716-01_2023
+-> NR_L2_ELP_27716-01
 ```
-
----
-
-## Requirements
-
-- Python 3
-- pandas
-- PyMuPDF
-- openpyxl
-- NumPy
-
-Install the packages with the same Python interpreter that runs the scripts:
-
-```powershell
-python -m pip install pandas pymupdf openpyxl numpy
-```
-
-Using the current explicit interpreter path:
-
-```powershell
-& "C:\Users\JoshuaDickens\AppData\Local\Programs\Python\Python314\python.exe" -m pip install pandas pymupdf openpyxl numpy
-```
-
-The Excel package is named `openpyxl`, ending with a lowercase letter `l`, not the number `1`.
-
----
-
-## Configuration and paths
-
-### Main script
-
-The current `Script.py` configuration is:
-
-```python
-DRY_RUN = True
-EXPORT_RESULTS = True
-
-CODE_DIRECTORY = Path(__file__).resolve().parent
-AUTOMATION_DIRECTORY = CODE_DIRECTORY.parent
-DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
-
-TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
-
-RESULTS_WORKBOOK = (
-    AUTOMATION_DIRECTORY
-    / f"RenameResults_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
-)
-```
-
-This resolves to paths such as:
-
-```text
-Code directory:    C:\Users\JoshuaDickens\Documents\Automation\Code
-Automation root:   C:\Users\JoshuaDickens\Documents\Automation
-Target directory:  C:\Users\JoshuaDickens\Documents\Target
-Results workbook:  C:\Users\JoshuaDickens\Documents\Automation\RenameResults_2026-07-27.xlsx
-```
-
-To process another sibling folder, change:
-
-```python
-TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
-```
-
-For example:
-
-```python
-TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Standards To Sort"
-```
-
-The selected folder must exist beside `Automation`.
-
-### Approval script
-
-`Rename_Approval.py` uses the report for the current date:
-
-```python
-RESULTS_WORKBOOK = (
-    AUTOMATION_DIRECTORY
-    / f"RenameResults_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
-)
-```
-
-This means the report should normally be reviewed and processed on the same date it was created.
-
-If approvals are applied on a later date, manually set the required workbook name, for example:
-
-```python
-RESULTS_WORKBOOK = (
-    AUTOMATION_DIRECTORY
-    / "RenameResults_2026-07-27.xlsx"
-)
-```
-
-Always check the workbook path printed or configured before applying real renames.
-
----
-
-## Project files
-
-### `Script.py`
-
-The main application entry point.
-
-It:
-
-- resolves project and target paths;
-- confirms that the target folder exists;
-- gets all PDF paths recursively;
-- processes each PDF;
-- catches per-file processing exceptions;
-- performs dry-run previews or automatic `SUCCESS` renames;
-- builds the complete results table;
-- writes a dated Excel report;
-- formats the workbook with Excel tables, filters, colours, widths, and a manual-decision dropdown.
-
-### `Rename_Approval.py`
-
-The separate manual-approval renamer.
-
-It:
-
-- loads the dated `RenameResults_YYYY-MM-DD.xlsx` workbook;
-- reads the `All Results` sheet;
-- checks that required columns exist;
-- selects only rows with `Manual Decision = APPROVE`;
-- uses `Approved Filename` when supplied;
-- otherwise uses `Generated Filename`;
-- previews or applies approved renames;
-- skips missing sources, non-PDF sources, identical paths, and existing destinations.
-
-### `extraction.py`
-
-Extracts PDF text, detects candidates, scores candidates, and discovers PDF files.
-
-Important functions:
-
-```python
-extract_pages(file_path)
-find_candidates(page_text)
-score_candidates(pages)
-choose_best_candidate(scores)
-get_file_names(directory)
-is_junk_candidate(candidate)
-```
-
-### `extraction_continued.py`
-
-Normalises codes, extracts metadata, builds filenames, and performs automatic renames.
-
-Important functions:
-
-```python
-normalise_code(code)
-extract_designation_metadata(pages, raw_code)
-build_filename(standard)
-rename_file(old_path, standard)
-```
-
-### `filename_hint.py`
-
-Extracts useful information from the current filename and supports tolerant filename comparison.
-
-The current filename is a validation hint, not an automatic source of truth.
-
-### `processing.py`
-
-Runs the complete processing pipeline for one PDF:
-
-```text
-PDF
--> extract pages
--> extract filename hints
--> score candidates
--> select the best candidate
--> normalise the code
--> extract metadata
--> apply metadata checks
--> build the proposed filename
--> validate the result
--> return StandardData
-```
-
-Important functions:
-
-```python
-process_file(file_path)
-test_single_file(file_path)
-```
-
-### `validate_standard.py`
-
-Assigns an automatic workflow status and records the reasons for review.
-
-### `utils.py`
-
-Contains the `StandardData` class used to carry the extraction, validation, filename, path, status, and reason information through the pipeline.
 
 ---
 
 ## Automatic processing workflow
+
+`Script.py` follows this sequence:
+
+```text
+PDF discovery
+-> text extraction
+-> filename-hint extraction
+-> candidate detection
+-> candidate canonicalisation
+-> candidate scoring
+-> best-candidate selection
+-> code normalisation
+-> year and amendment extraction
+-> validation
+-> status assignment
+-> proposed filename
+-> dry-run preview or automatic SUCCESS rename
+-> timestamped Excel report
+```
 
 ### Safe analysis mode
 
@@ -346,12 +447,13 @@ DRY_RUN = True
 EXPORT_RESULTS = True
 ```
 
-This will:
+This mode:
 
-- analyse the target PDFs;
-- print proposed operations;
-- rename no PDFs;
-- export the dated Excel report.
+- analyses eligible PDFs;
+- prints proposed operations;
+- makes no filesystem changes;
+- creates a timestamped report;
+- records that the processing run was a dry run.
 
 ### Automatic rename mode
 
@@ -362,13 +464,60 @@ DRY_RUN = False
 EXPORT_RESULTS = True
 ```
 
-This will:
+This mode:
 
-- automatically rename only rows whose automatic status is `SUCCESS`;
-- leave `REVIEW_REQUIRED` and `NO_CANDIDATE` records untouched;
-- export the outcome of every processed file.
+- automatically renames only `SUCCESS` results;
+- leaves `REVIEW_REQUIRED` and `NO_CANDIDATE` files untouched;
+- records every result in the workbook.
 
-Always run and inspect a dry run before enabling automatic renaming.
+Always inspect a dry run before enabling real automatic changes.
+
+---
+
+## Candidate detection and normalisation
+
+### Candidate scoring
+
+Candidate scores are influenced by:
+
+- the page on which the candidate appears;
+- position near the beginning of a page;
+- recognised prefixes;
+- multipart-number structure;
+- occurrences across extracted pages;
+- nearby negative context such as `SUPERSEDE`, `WITHDRAWN`, or `COMMITTEE REF`.
+
+The system deliberately avoids document-specific rules where possible.
+
+### GEGN and GLGN handling
+
+Equivalent guidance-note forms are canonicalised before scoring:
+
+```text
+GEGN8646
+GEGN 8646
+GE/GN/8646
+GE_GN_8646
+GE-GN-8646
+GE GN 8646
+```
+
+become:
+
+```text
+GEGN 8646
+```
+
+Equivalent `GLGN` forms are treated in the same way.
+
+This allows equivalent occurrences to reinforce one candidate instead of splitting their scores across differently formatted strings. No separate GEGN/GLGN scoring bonus is currently applied.
+
+Other codes remain unaffected. For example:
+
+```text
+GE/RT/8270
+-> GE_RT_8270
+```
 
 ---
 
@@ -378,11 +527,11 @@ Always run and inspect a dry run before enabling automatic renaming.
 
 The extracted result passed the current automatic validation checks.
 
-When `Script.py` has `DRY_RUN = False`, these records are eligible for automatic renaming.
+When `Script.py` has `DRY_RUN = False`, only these rows are eligible for automatic renaming.
 
 ### `REVIEW_REQUIRED`
 
-The application generated a proposed result, but one or more signals require human review.
+A proposed result was generated, but one or more signals require human review.
 
 Typical reasons include:
 
@@ -402,76 +551,76 @@ Target already exists
 
 No suitable standard-code candidate was selected.
 
-The `Reasons` and `Extracted Text Length` columns help distinguish between an image-only PDF and a text PDF that is not covered by the current candidate patterns.
+`Reasons` and `Extracted Text Length` help distinguish image-only PDFs from text PDFs not covered by the current candidate patterns.
+
+OCR is not a separate status. OCR-related problems are recorded in `Reasons`.
 
 ---
 
-## Excel report
+## Excel review reports
 
-`Script.py` creates a dated report in `Automation`:
-
-```text
-RenameResults_YYYY-MM-DD.xlsx
-```
-
-For example:
+Every `Script.py` run creates a unique workbook in:
 
 ```text
-RenameResults_2026-07-27.xlsx
+Automation\Reports\
 ```
 
-### Workbook sheets
+Naming format:
 
-The workbook contains only:
+```text
+RenameResults_YYYY-MM-DD_HH-MM-SS.xlsx
+```
+
+Example:
+
+```text
+RenameResults_2026-07-28_14-22-31.xlsx
+```
+
+A new run does not overwrite an earlier report or its manual decisions.
+
+### Worksheets
+
+The workbook contains:
 
 ```text
 All Results
 Summary
+Audit Log
 ```
-
-There is no separate `Review Required` sheet. Review records are filtered directly inside the `All Results` table, keeping one authoritative copy of every manual decision.
 
 ### `All Results`
 
-The complete output is formatted as the Excel table:
+The main data is stored in an Excel table named:
 
 ```text
 tblRenameResults
 ```
 
-The table includes:
+It includes:
 
-- built-in sorting and filtering;
-- alternating row styling;
+- sorting and filtering;
 - a frozen header row;
-- sensible column widths;
+- alternating row styling;
 - wrapped long-text columns;
 - green status cells for `SUCCESS`;
 - orange status cells for `REVIEW_REQUIRED`;
 - red status cells for `NO_CANDIDATE`;
-- pale-yellow manual-review cells;
-- an `APPROVE / REJECT / HOLD` dropdown.
+- pale-yellow manual-review columns;
+- an `APPROVE / REJECT / HOLD` dropdown;
+- an `Open File` hyperlink using a relative path where possible.
 
-To see only records requiring attention, filter the `Status` column to:
-
-```text
-REVIEW_REQUIRED
-NO_CANDIDATE
-```
-
-### `Summary`
-
-The summary is formatted as the Excel table:
+The heading must be exactly:
 
 ```text
-tblRenameSummary
+Open File
 ```
 
-It contains the count of records by automatic status.
+in both normal and exception result dictionaries.
 
-### Report columns
+There is no separate `Review Required` worksheet. Filter `Status` in `tblRenameResults` to find review records.
 
-The current report includes:
+### Main report columns
 
 ```text
 Original File
@@ -495,13 +644,49 @@ Rename Result
 Manual Decision
 Approved Filename
 Reviewer Notes
+Approval Result
+Approved By
+Approved At
+Final Path
+Open File
 ```
+
+### `Summary`
+
+Contains the automatic-status counts and is formatted as:
+
+```text
+tblRenameSummary
+```
+
+### `Audit Log`
+
+Records processing and real approval runs. Typical fields are:
+
+```text
+Timestamp
+Event
+User
+Dry Run
+Script
+Details
+```
+
+The initial `PROCESSING_RUN` entry records:
+
+- when the workbook was created;
+- the operating-system username;
+- whether the processing run was a dry run;
+- the target directory;
+- processed-file and status counts.
+
+A real approval run appends an `APPROVAL_RUN` entry. Approval dry runs do not modify the workbook.
 
 ---
 
-## Manual review columns
+## Manual review workflow
 
-The following columns are created automatically in every report:
+Manual-review columns are created automatically:
 
 ```text
 Manual Decision
@@ -509,11 +694,18 @@ Approved Filename
 Reviewer Notes
 ```
 
-They are blank by default.
+Approval-audit columns are also included:
+
+```text
+Approval Result
+Approved By
+Approved At
+Final Path
+```
 
 ### `Manual Decision`
 
-Contains an Excel dropdown with:
+Valid values are:
 
 ```text
 APPROVE
@@ -521,142 +713,136 @@ REJECT
 HOLD
 ```
 
-The dropdown is applied to all result rows that exist when the report is created.
+Blank means no instruction.
 
 ### `Approved Filename`
 
-An optional manual override for `Generated Filename`.
+Optional override for `Generated Filename`.
 
-Enter the filename with or without `.pdf`. `Rename_Approval.py` removes a trailing `.pdf` before constructing the destination path.
+It may be entered with or without `.pdf`. A trailing `.pdf` is removed before the destination is constructed, and path components are discarded so that only a filename can be supplied.
 
 ### `Reviewer Notes`
 
-Free text explaining why a record was approved, rejected, corrected, or placed on hold.
+Free text for review evidence, corrections, or clarification requirements.
 
 ---
 
-## Manual decisions
+## Approval behaviour
 
-### `APPROVE`
+### `APPROVE` with blank `Approved Filename`
 
-Allows `Rename_Approval.py` to process the row.
+Uses `Generated Filename`.
 
-#### Approve the generated filename
+### `APPROVE` with populated `Approved Filename`
 
-```text
-Manual Decision: APPROVE
-Approved Filename: [blank]
-Reviewer Notes: Checked cover; generated designation and year confirmed
-```
-
-The approval script uses `Generated Filename`.
-
-#### Approve a corrected filename
-
-```text
-Manual Decision: APPROVE
-Approved Filename: NR_SP_SIG_50006_2006
-Reviewer Notes: Corrected designation manually confirmed from document cover
-```
-
-The approval script uses `Approved Filename` instead of `Generated Filename`.
+Uses `Approved Filename` instead of the generated value.
 
 ### `REJECT`
 
-Means the proposed result is wrong and must not be renamed by the approval script.
+Moves the original PDF into:
 
 ```text
-Manual Decision: REJECT
-Approved Filename: [blank]
-Reviewer Notes: Referenced standard selected instead of document designation
+<Target>\Rejected\
 ```
 
-Any value in `Approved Filename` is ignored when the decision is `REJECT`.
+The original filename is retained. Existing destinations are never overwritten.
 
 ### `HOLD`
 
-Means no final decision has been reached.
+Moves the original PDF into:
 
 ```text
-Manual Decision: HOLD
-Approved Filename: [blank]
-Reviewer Notes: Needs confirmation from document owner
+<Target>\Hold\
 ```
 
-Any value in `Approved Filename` is ignored when the decision is `HOLD`.
+The original filename is retained. Hold is temporary and remains eligible for future review.
+
+### Approving a previously held file
+
+The row's `Final Path` is used to locate the document in `Hold`. The file is then renamed and moved out of `Hold` into the main target directory:
+
+```text
+<Target>\Hold\unclear-document.pdf
+-> <Target>\EN_55032_2015.pdf
+```
+
+### Rejecting a previously held file
+
+A held document later changed to `REJECT` is moved from `Hold` into `Rejected`.
 
 ### Blank
 
-A blank decision means the record has not been manually approved. It is ignored by `Rename_Approval.py`.
-
-### Decision summary
-
-```text
-APPROVE + blank Approved Filename
--> use Generated Filename
-
-APPROVE + populated Approved Filename
--> use Approved Filename
-
-REJECT
--> do not rename
-
-HOLD
--> do not rename
-
-Blank
--> do not rename
-```
-
-If a generated result is wrong but the correct filename is known, use `APPROVE` and enter the corrected value in `Approved Filename`.
+The file is left untouched and reconsidered on later approval runs.
 
 ---
 
-## Manual approval workflow
+## Repeated approval runs
 
-1. Run `Script.py` with:
+The workbook is designed to be reused.
 
-   ```python
-   DRY_RUN = True
-   EXPORT_RESULTS = True
-   ```
+- blank rows remain available for later decisions;
+- `HOLD` rows remain available for later clarification;
+- failed real operations remain eligible for retry;
+- completed approvals and rejections are skipped on later runs;
+- `Final Path` is preferred over `Original File` when locating a previously moved held file.
 
-2. Open the dated `RenameResults_YYYY-MM-DD.xlsx` workbook.
-3. Use the filters in `All Results` to find `REVIEW_REQUIRED` and `NO_CANDIDATE` records.
-4. Inspect each relevant PDF.
-5. Complete `Manual Decision` using the dropdown.
-6. If necessary, enter a corrected value in `Approved Filename`.
-7. Add useful evidence or comments in `Reviewer Notes`.
-8. Save and close the workbook.
-9. Run `Rename_Approval.py` with:
+A completed result is identified by an `Approval Result` beginning with:
 
-   ```python
-   DRY_RUN = True
-   ```
+```text
+COMPLETED -
+```
 
-10. Check every printed source and target path.
-11. When satisfied, change `Rename_Approval.py` to:
+Changing the dropdown on a completed row does not automatically reverse the previous filesystem action. Completed approvals and rejections remain skipped. Reversal of a completed action must be handled deliberately outside this workflow.
 
-    ```python
-    DRY_RUN = False
-    ```
+If an approved file is later moved elsewhere as part of the normal library process, later approval loops still skip the completed row; the stored `Final Path` is the path produced at the time of approval, not permanent live tracking.
 
-12. Run it again to apply only approved renames.
+A held file moved manually away from both `Final Path` and `Original File` cannot be safely located automatically and will fail validation rather than causing a filesystem-wide filename search.
 
-### Important workbook warning
+---
 
-Rerunning `Script.py` on the same date can overwrite the existing dated workbook and remove manual entries.
+## Filesystem safety
 
-Before rerunning the main script after review has started, either:
+### Main processor
 
-- make a backup copy of the workbook; or
-- rename the reviewed workbook and update `RESULTS_WORKBOOK` in `Rename_Approval.py` to point to it.
+Automatic renaming requires:
 
-Also close the workbook in Excel before either Python script needs to read or overwrite it.
+```python
+standard.status == "SUCCESS"
+```
+
+### Approval processor
+
+Before a rename or move, the script checks that:
+
+- the source exists;
+- the source is a file;
+- the source has a `.pdf` extension;
+- the source is inside the configured target directory;
+- source and destination are not identical;
+- the destination does not already exist.
+
+Additional safeguards include:
+
+- separate dry-run settings in both scripts;
+- no overwrite of existing PDFs;
+- explicit target-path validation;
+- workbook lock checks before a real approval run;
+- no workbook changes during approval dry runs;
+- completed operations are not repeated;
+- rejected and held files retain their original names when moved;
+- approved held files are moved back to the main target only after an explicit approval.
+
+Keep a backup before every real bulk operation.
 
 ---
 
 ## Running the scripts
+
+Run commands from the project root rather than the Visual Studio Code installation directory.
+
+```powershell
+cd "C:\Users\JoshuaDickens\Documents\Automation"
+```
 
 ### Main processor
 
@@ -664,44 +850,157 @@ Also close the workbook in Excel before either Python script needs to read or ov
 & "C:\Users\JoshuaDickens\AppData\Local\Programs\Python\Python314\python.exe" "C:\Users\JoshuaDickens\Documents\Automation\Code\Script.py"
 ```
 
-### Manual approval renamer
+### Manual approval processor
 
 ```powershell
 & "C:\Users\JoshuaDickens\AppData\Local\Programs\Python\Python314\python.exe" "C:\Users\JoshuaDickens\Documents\Automation\Code\Rename_Approval.py"
 ```
 
-Both scripts should be run in dry-run mode before real filesystem changes are allowed.
+Both scripts should be run in dry-run mode before real filesystem changes are enabled.
 
 ---
 
-## Rename safety
+## Automated tests
 
-### Main script
+The test suite uses pytest.
 
-An automatic rename requires:
+Current coverage includes:
 
-```python
-standard.status == "SUCCESS"
+- candidate canonicalisation for GEGN and GLGN variants;
+- protection of unrelated formats such as `GE/RT/8270`;
+- code normalisation and filename construction;
+- candidate scoring and selection;
+- PDF discovery;
+- exclusion of the configured `Rejected` folder;
+- continued discovery inside `Hold`;
+- a real DLR processing integration test.
+
+### Run all tests
+
+From the `Automation` directory:
+
+```powershell
+python -m pytest Tests -v
 ```
 
-### Approval script
+Using the explicit interpreter:
 
-A manual rename requires:
+```powershell
+& "C:\Users\JoshuaDickens\AppData\Local\Programs\Python\Python314\python.exe" -m pytest Tests -v
+```
+
+### Collect tests without running them
+
+```powershell
+python -m pytest Tests --collect-only -v
+```
+
+### Run one test file
+
+```powershell
+python -m pytest Tests\test_normalisation.py -v
+```
+
+### Important working-directory note
+
+If pytest reports:
 
 ```text
-Manual Decision = APPROVE
+collected 0 items
 ```
 
-The approval script also:
+check the displayed `rootdir`. It should point to the Automation project, not:
 
-- requires a filename from either `Approved Filename` or `Generated Filename`;
-- checks that the source exists;
-- confirms that the source has a `.pdf` extension;
-- skips a file already correctly named;
-- skips an existing destination;
-- supports its own dry-run mode.
+```text
+C:\Users\JoshuaDickens\AppData\Local\Programs\Microsoft VS Code
+```
 
-Keep a backup of the target folder before any real bulk rename operation.
+### Linting
+
+Run the critical checks locally with:
+
+```powershell
+python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+```
+
+Run the broader warning report with:
+
+```powershell
+python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+```
+
+---
+
+## GitHub Actions
+
+The repository includes a workflow that:
+
+1. checks out the repository;
+2. installs the configured Python version;
+3. installs dependencies;
+4. runs flake8;
+5. runs pytest.
+
+Example workflow:
+
+```yaml
+name: Python application
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Lint for syntax errors and undefined names
+        run: |
+          python -m flake8 . \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
+
+      - name: Report other lint warnings
+        run: |
+          python -m flake8 . \
+            --count \
+            --exit-zero \
+            --max-complexity=10 \
+            --max-line-length=127 \
+            --statistics
+
+      - name: Run tests
+        run: |
+          python -m pytest Tests -v
+```
+
+GitHub Actions uses Ubuntu, so file and directory casing matters. `Tests`, `Code`, and module filenames must match the committed names exactly.
+
+Real-PDF integration tests run in CI only if the permitted sample PDFs are committed at the paths expected by the tests. Missing optional samples may be skipped where the tests explicitly use `pytest.skip()`.
 
 ---
 
@@ -709,11 +1008,17 @@ Keep a backup of the target folder before any real bulk rename operation.
 
 ### Filename comparison
 
-Older filenames may use shortened, legacy, or descriptive designations. A filename mismatch is therefore a review signal, not proof that extraction is wrong.
+Older filenames may contain shortened, legacy, or descriptive standard codes. A mismatch is a review signal, not proof that extraction is wrong.
 
-### Wrong years from surrounding text
+The existing comparison is deliberately conservative and has not been expanded to override extracted metadata.
 
-Years near terms such as the following may occasionally be selected incorrectly:
+### Competing designations
+
+Referenced, related, superseded, or replacement standards can occasionally outscore the document's actual designation.
+
+### Year extraction
+
+Year extraction can still select years associated with:
 
 ```text
 SUPERSEDES
@@ -725,128 +1030,149 @@ REFERENCE
 REFERENCES
 ```
 
+Some metadata expressions currently search broad text ranges. Bounded-context year extraction remains a future improvement.
+
 ### Image-only PDFs
 
-PyMuPDF may return no text for scanned or image-only documents. These remain in the manual-review workflow. OCR is not currently part of the automatic pipeline.
+PyMuPDF may return no text for scanned or image-only PDFs. These remain in manual review. OCR is not currently part of the automatic pipeline.
 
-### Competing designations
+### Duplicate destinations
 
-A referenced, related, draft, or superseded standard can occasionally outscore the document's actual designation.
+Renames and moves are skipped when the destination already exists. Existing files are never overwritten automatically.
 
-### Current-date report lookup
+### Duplicate candidate matches
 
-`Rename_Approval.py` currently calculates the report filename from today's date. A report created on an earlier date must be referenced manually if approval is performed later.
+A specific GEGN/GLGN pattern and a generic candidate pattern may detect the same occurrence. Canonicalisation unifies representation, but exact score values should not be treated as stable external interfaces.
 
-### Approval results are not written back
+### Completed decisions are not reversible through the dropdown
 
-The current `Rename_Approval.py` prints whether it would rename, skipped, or renamed each approved file, but it does not write those outcomes back into the Excel workbook.
+A completed approval or rejection is not automatically undone if `Manual Decision` is later changed. This prevents the review workbook from acting as an unrestricted undo mechanism.
+
+### External file movement
+
+After a completed approved file leaves the target as part of the downstream library workflow, the workbook does not track its new location. The completed audit remains valid, and later approval runs skip the row.
+
+### Library workbook integration
+
+Direct integration with `Library.xlsm` is intentionally out of scope. Approved files currently enter the existing library registration workflow separately.
 
 ---
 
 ## Troubleshooting
 
-### `PermissionError` when exporting the workbook
+### No tests ran
 
-Example:
+Confirm the current directory:
 
-```text
-PermissionError: [Errno 13] Permission denied: 'RenameResults_YYYY-MM-DD.xlsx'
+```powershell
+Get-Location
 ```
 
-The workbook is normally open in Excel. Close it and rerun the script.
+Then navigate to the project:
 
-If the main report is locked, `Script.py` attempts to create a timestamped fallback file:
-
-```text
-RenameResults_YY-MM-DD_HH-MM-SS.xlsx
+```powershell
+cd "C:\Users\JoshuaDickens\Documents\Automation"
+python -m pytest Tests -v
 ```
 
-### No matching distribution for `openpyxl`
+### Import errors during tests
 
-Confirm the package spelling:
+Confirm `Tests\conftest.py` adds the `Code` directory to `sys.path`:
 
-```text
-openpyxl
+```python
+import sys
+from pathlib import Path
+
+TESTS_DIRECTORY = Path(__file__).resolve().parent
+AUTOMATION_DIRECTORY = TESTS_DIRECTORY.parent
+CODE_DIRECTORY = AUTOMATION_DIRECTORY / "Code"
+
+if str(CODE_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(CODE_DIRECTORY))
 ```
-
-The final character is a lowercase `l`, not the number `1`.
 
 ### Approval workbook not found
 
-`Rename_Approval.py` expects:
+Check:
 
-```text
-Automation\RenameResults_<today's YYYY-MM-DD>.xlsx
-```
+- the report exists in `Automation\Reports`;
+- its name exactly matches the timestamped pattern;
+- it is not an Excel temporary file beginning with `~$`;
+- `RESULTS_WORKBOOK_OVERRIDE` is either `None` or a valid explicit path.
 
-Check the date in the filename. If the report was generated on another day, set `RESULTS_WORKBOOK` explicitly to the correct file.
+### Permission error when updating a report
 
-### No approved records found
+Close the workbook in Excel before running real approval processing.
 
-Confirm that:
-
-- decisions were entered on `All Results`;
-- the workbook was saved;
-- the workbook was closed before running the script;
-- the selected values are `APPROVE`;
-- `Rename_Approval.py` points to the workbook that was edited.
+The approval script should check write access before changing PDFs, but the workbook must remain closed until processing finishes.
 
 ### Destination already exists
 
-The renamer deliberately skips the row. Inspect the destination file and decide whether it is a duplicate, an earlier rename, or a naming conflict.
+The operation is intentionally skipped. Inspect both files and decide whether the destination is a duplicate, a previous rename, or a naming conflict.
 
 ### Source file does not exist
 
-The file may already have been renamed, moved, or deleted after the report was created. Generate a new report or correct the source path before trying again.
+The file may already have been moved, renamed, or deleted. For held files, confirm that `Final Path` points to the current location.
 
----
+### Relative Open File link unavailable
 
-## Optional targeted debugging
+Relative links may be unavailable when the workbook and PDF are on different Windows drives. The report records this rather than generating an invalid relative link.
 
-`Script.py` retains commented calls to `test_single_file()` at the end of the file.
+### Incorrect target folder
 
-For the current path structure, prefer paths derived from `TARGET_DIRECTORY`, for example:
-
-```python
-test_single_file(
-    str(
-        TARGET_DIRECTORY
-        / "Documents"
-        / "EN_12015_2004.pdf"
-    )
-)
-```
-
-This avoids relying on the PowerShell working directory.
+Ensure both `Script.py` and `Rename_Approval.py` use the same designated folder. `Target` is only a testing placeholder.
 
 ---
 
 ## Recommended operating procedure
 
 1. Back up the target documents.
-2. Keep `DRY_RUN = True` in both scripts.
-3. Run `Script.py` with `EXPORT_RESULTS = True`.
-4. Inspect the status summary.
-5. Filter `All Results` to review exceptions.
-6. Spot-check a representative group of automatic successes.
-7. Complete the manual-decision columns.
-8. Save and close the report.
-9. Run `Rename_Approval.py` in dry-run mode.
-10. Check all approved targets.
-11. If required, run the main script with `DRY_RUN = False` to apply automatic `SUCCESS` renames.
-12. Run the approval script with `DRY_RUN = False` to apply explicit manual approvals.
-13. Retain the Excel report as an audit record.
+2. Confirm both scripts point to the same designated target folder.
+3. Keep `DRY_RUN = True` in both scripts.
+4. Run `Script.py` with `EXPORT_RESULTS = True`.
+5. Confirm `Rejected` files were excluded and `Hold` files remained visible.
+6. Inspect the status summary and `Audit Log`.
+7. Filter `All Results` to `REVIEW_REQUIRED` and `NO_CANDIDATE`.
+8. Spot-check a representative sample of `SUCCESS` results.
+9. Complete `Manual Decision`, `Approved Filename`, and `Reviewer Notes` where required.
+10. Save and close the workbook.
+11. Run `Rename_Approval.py` with `DRY_RUN = True`.
+12. Check the selected workbook and every printed source and destination.
+13. Set `DRY_RUN = False` only when satisfied.
+14. Run the approval script again to apply decisions and write outcomes back.
+15. Review `Approval Result`, `Final Path`, and `Audit Log`.
+16. Move completed approved files into the downstream library-registration workflow.
+17. Retain timestamped reports as audit records.
+
+---
+
+## Future improvements
+
+Potential future work includes:
+
+- improve year extraction using bounded context around the selected designation;
+- deduplicate identical candidate occurrences produced by overlapping patterns;
+- add unit tests for approval state transitions and workbook write-back;
+- add tests for dry-run safety across every filesystem helper;
+- preserve a detailed row-level history of repeated failed attempts if required;
+- centralise shared target configuration in a small configuration module;
+- improve candidate context without overfitting rules to individual PDFs;
+- expand the permitted real-PDF regression sample set;
+- evaluate OCR as a separate optional preprocessing stage;
+- consider downstream library integration only after the current workflow is stable.
 
 ---
 
 ## Safety reminders
 
-- Use dry-run mode before every real rename batch.
-- Review the dated workbook before changing files.
-- Do not leave `APPROVE` selected unless the generated or corrected filename has been verified.
-- Use `APPROVE` plus `Approved Filename` when applying a manual correction.
-- Use `REJECT` for an incorrect proposal that must not be applied.
-- Use `HOLD` when further investigation is required.
-- Keep manual decisions blank by default.
-- Do not automatically trust either the filename or extracted result when they disagree.
+- Use dry-run mode before every real batch.
 - Keep backups before bulk filesystem operations.
+- Review the timestamped report before approving changes.
+- Never automatically trust either the existing filename or extracted result when they disagree.
+- Use `APPROVE` plus `Approved Filename` for a verified manual correction.
+- Use `REJECT` only for documents that should leave the standards-library workflow.
+- Use `HOLD` while clarification is still required.
+- Leave undecided records blank.
+- Close the workbook before real approval processing.
+- Do not expect changing a completed row's dropdown to reverse the completed action.
+- Keep deployment paths consistent between both scripts.
