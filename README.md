@@ -80,16 +80,18 @@ Documents\
 │   │   ├── filename_hint.py
 │   │   ├── processing.py
 │   │   ├── validate_standard.py
-│   │   ├── utils.py
-│   │   └── README.md
+│   │   └── utils.py
+│   │   
 │   ├── Reports\
 │   │   └── RenameResults_YYYY-MM-DD_HH-MM-SS.xlsx
-│   └── Tests\
-│       ├── conftest.py
-│       ├── test_extraction.py
-│       ├── test_file_discovery.py
-│       ├── test_normalisation.py
-│       └── test_processing_integration.py
+│   ├── Tests\
+│   │   ├── conftest.py
+│   │   ├── test_extraction.py
+│   │   ├── test_file_discovery.py
+│   │   ├── test_normalisation.py
+│   │   └── test_processing_integration.py
+│   ├── README.md
+│   └── requirements.txt
 └── Target\
     ├── PDF files
     ├── Rejected\

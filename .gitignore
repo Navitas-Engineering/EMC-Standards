@@ -1,0 +1,17 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Test artefacts
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Generated reports
+Reports/*
+!Reports/.gitkeep
+
+# Excel temporary files
+~$*.xlsx
