@@ -619,21 +619,21 @@ if EXPORT_RESULTS and not final_list.empty:
                             start=workbook_directory
                         )
 
-                        relative_link = relative_path.replace(
-                            "\\",
-                            "/"
-                        )
+                        resolved_file_path = file_to_open.resolve()
+
+                        hyperlink_target = resolved_file_path.as_uri()
 
                         open_file_cell.value = "Open File"
-
-                        # Relative external hyperlinks should not use the "file:" prefix.
-                        open_file_cell.hyperlink = relative_link
-
+                        open_file_cell.hyperlink = hyperlink_target
                         open_file_cell.style = "Hyperlink"
 
                         open_file_cell.alignment = Alignment(
                             horizontal="center",
                             vertical="center"
+                        )
+
+                        print(
+                            f"Hyperlink target: {hyperlink_target}"
                         )
 
                     except ValueError:
