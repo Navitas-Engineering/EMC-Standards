@@ -580,16 +580,12 @@ if EXPORT_RESULTS and not final_list.empty:
                         str(proposed_path_value)
                     )
 
-                # After a successful real rename, the proposed
-                # destination should exist.
                 if (
                     proposed_path is not None
                     and proposed_path.exists()
                 ):
                     file_to_open = proposed_path
 
-                # During a dry run, or for a file not renamed,
-                # the original source should still exist.
                 elif (
                     original_path is not None
                     and original_path.exists()
@@ -606,6 +602,7 @@ if EXPORT_RESULTS and not final_list.empty:
 
                 if file_to_open is None:
                     open_file_cell.value = "File not found"
+                    open_file_cell.hyperlink = None
 
                     open_file_cell.alignment = Alignment(
                         horizontal="center",
@@ -619,12 +616,20 @@ if EXPORT_RESULTS and not final_list.empty:
                             start=workbook_directory
                         )
 
-                        resolved_file_path = file_to_open.resolve()
+                        relative_link = relative_path.replace(
+                            "\\",
+                            "/"
+                        )
 
-                        hyperlink_target = resolved_file_path.as_uri()
+                        encoded_relative_link = quote(
+                            relative_link,
+                            safe="/:."
+                        )
 
                         open_file_cell.value = "Open File"
-                        open_file_cell.hyperlink = hyperlink_target
+                        open_file_cell.hyperlink = (
+                            encoded_relative_link
+                        )
                         open_file_cell.style = "Hyperlink"
 
                         open_file_cell.alignment = Alignment(
@@ -633,21 +638,26 @@ if EXPORT_RESULTS and not final_list.empty:
                         )
 
                         print(
-                            f"Hyperlink target: {hyperlink_target}"
+                            f"Relative hyperlink: "
+                            f"{encoded_relative_link}"
                         )
 
-                    except ValueError:
-                        # Usually means the workbook and the PDF
-                        # are located on different Windows drives.
+                    except ValueError as error:
                         open_file_cell.value = (
                             "Relative link unavailable"
                         )
+
+                        open_file_cell.hyperlink = None
 
                         open_file_cell.alignment = Alignment(
                             horizontal="center",
                             vertical="center"
                         )
 
+                        print(
+                            f"Could not create hyperlink for "
+                            f"{file_to_open}: {error}"
+                        )
         # ----------------------------------------------------
         # Add APPROVE / REJECT / HOLD dropdown
         # ----------------------------------------------------
