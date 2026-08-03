@@ -626,9 +626,8 @@ if EXPORT_RESULTS and not final_list.empty:
 
                         open_file_cell.value = "Open File"
 
-                        open_file_cell.hyperlink = (
-                            f"file:{relative_link}"
-                        )
+                        # Relative external hyperlinks should not use the "file:" prefix.
+                        open_file_cell.hyperlink = relative_link
 
                         open_file_cell.style = "Hyperlink"
 
