@@ -12,8 +12,6 @@ from openpyxl.utils import get_column_letter
 # Configuration
 # ------------------------------------------------------------
 
-
-
 CODE_DIRECTORY = Path(__file__).resolve().parent
 AUTOMATION_DIRECTORY = CODE_DIRECTORY.parent
 DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
@@ -25,7 +23,6 @@ TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
 # Folders used for rejected and held documents.
 REJECTED_DIRECTORY = TARGET_DIRECTORY / "Rejected"
 HOLD_DIRECTORY = TARGET_DIRECTORY / "Hold"
-
 
 '''------------------------------------------------------------'''
 
@@ -188,6 +185,7 @@ results = pd.read_excel(
 required_columns = [
     "Original File",
     "Generated Filename",
+    "Proposed Path",
     "Status",
     "Manual Decision",
     "Approved Filename",
@@ -677,10 +675,15 @@ def rename_approved_file(
 
 def get_current_source_path(row):
     """
-    Return the latest known file location.
+    Return the latest known location of a PDF.
 
-    Final Path is used first so a document previously moved to Hold
-    can later be approved or rejected. Original File is the fallback.
+    Search order:
+    1. Final Path from a previous approval operation.
+    2. Original File when it still exists.
+    3. Proposed Path only when the workbook indicates that a real
+       automatic rename was completed successfully.
+    4. Original File as the final fallback for a useful validation
+       error.
     """
 
     final_path_value = row.get(
@@ -698,9 +701,49 @@ def get_current_source_path(row):
         if final_path.exists():
             return final_path
 
-    return Path(
+    original_path = Path(
         str(row["Original File"])
     )
+
+    if original_path.exists():
+        return original_path
+
+    proposed_path_value = row.get(
+        "Proposed Path"
+    )
+
+    rename_result = normalise_cell_text(
+        row.get("Rename Result")
+    )
+
+    status = normalise_cell_text(
+        row.get("Status")
+    ).upper()
+
+    automatic_rename_completed = (
+        status == "SUCCESS"
+        and rename_result
+        and not rename_result.lower().startswith(
+            "dry run"
+        )
+        and not rename_result.lower().startswith(
+            "not renamed"
+        )
+    )
+
+    if (
+        automatic_rename_completed
+        and pd.notna(proposed_path_value)
+        and str(proposed_path_value).strip()
+    ):
+        proposed_path = Path(
+            str(proposed_path_value).strip()
+        )
+
+        if proposed_path.exists():
+            return proposed_path
+
+    return original_path
 
 def normalise_cell_text(value):
     """
