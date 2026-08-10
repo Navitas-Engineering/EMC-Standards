@@ -7,6 +7,7 @@ import re
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+from utils import YN
 
 # ------------------------------------------------------------
 # Configuration
@@ -36,7 +37,7 @@ HOLD_DIRECTORY = TARGET_DIRECTORY / "Hold"
 # )
 
 RESULTS_WORKBOOK_OVERRIDE = None        ;'''Edit this to select a specific report, or leave as "None" to select the newest timestamped report.'''
-DRY_RUN = True                          ;'''Set to True to simulate approval processing without renaming or moving files. Set to False to perform real file operations.'''
+DRY_RUN = YN("Would you like to perform a dry run? (y/n): ")                          ;'''Set to True to simulate approval processing without renaming or moving files. Set to False to perform real file operations.'''
 
 '''------------------------------------------------------------'''
 CURRENT_USER = getuser()
@@ -126,12 +127,18 @@ print("Approval locations:")
 print(f"  Target directory:  {TARGET_DIRECTORY}")
 print(f"  Rejected folder:   {REJECTED_DIRECTORY}")
 print(f"  Hold folder:       {HOLD_DIRECTORY}")
-print(f"  Results workbook:  {RESULTS_WORKBOOK}")
 print(f"  Dry run:           {DRY_RUN}")
 print(f"  Selected because:  {WORKBOOK_SELECTION_REASON}")
 print(f"  Current user:      {CURRENT_USER}")
+print(f"  Dry run:           {DRY_RUN}")
+print(f"  Selected results workbook:  {RESULTS_WORKBOOK}")
+
 print()
 
+check = YN("Are you happy to continue with these settings? (y/n): ")
+if not check:
+    print("Exiting.")
+    exit(0)
 
 # ------------------------------------------------------------
 # Validate paths

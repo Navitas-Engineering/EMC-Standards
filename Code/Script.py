@@ -8,6 +8,7 @@ from getpass import getuser
 from extraction import get_file_names
 from processing import process_file, test_single_file
 from extraction_continued import rename_file
+from utils import YN
 
 
 from openpyxl import load_workbook
@@ -19,8 +20,7 @@ from openpyxl.utils import get_column_letter
 # ------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------
-
-DRY_RUN = True
+DRY_RUN = YN("Would you like to perform a dry run? (y/n): ")
 EXPORT_RESULTS = True
 
 #Timestamp for workbook filename is generated automatically, so that multiple runs do not overwrite each other.
@@ -69,7 +69,13 @@ print(f"  Results workbook: {RESULTS_WORKBOOK}")
 print(f"  Rejected folder:   {REJECTED_DIRECTORY}")
 print(f"  Run started:       {RUN_STARTED_AT}")
 print(f"  Created by:        {CURRENT_USER}")
+print(f"  Dry run:           {DRY_RUN}")
 print()
+
+check = YN("Are you happy to continue with these settings? (y/n): ")
+if not check:
+    print("Exiting.")
+    exit(0)
 
 # ------------------------------------------------------------
 # Processing

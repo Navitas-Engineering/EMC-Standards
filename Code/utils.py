@@ -60,7 +60,7 @@ class StandardData:
 
         return "; ".join(self.reasons)
 
-    def __repr__(self):
+    def __repr__(self): 
         return (
             "StandardData("
             f"raw_code={self.raw_code!r}, "
@@ -77,3 +77,11 @@ class StandardData:
             f"reasons={self.reasons!r}"
             ")"
         )
+
+def YN(query):
+    response = input(query).strip().lower()
+    while response not in ['y', 'n']:
+        response = input("Invalid input. Please enter 'y' or 'n': ").strip().lower()
+    return response == 'y'
+
+
