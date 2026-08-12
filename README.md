@@ -129,13 +129,3 @@ python -m pytest Tests -v
 ```
 
 The repository includes a GitHub Actions workflow that installs dependencies, runs flake8, and executes pytest on pushes and pull requests.
-
----
-
-## Contributing
-
-Contributions, bug reports, and suggestions are welcome. Open an issue describing the change you propose and include sample PDFs or details where helpful.
-
----
-
-If you want, I can further shorten the README, add badges (CI, Python version), or open a PR with this change—tell me which you'd prefer.
