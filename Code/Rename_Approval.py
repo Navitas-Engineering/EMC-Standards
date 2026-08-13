@@ -9,6 +9,15 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from utils import YN
 
+Target_Folder = "New Documents"  # Enter name of the folder containing the PDFs to be renamed here.
+
+#------------------------------------------------------------
+if Target_Folder == "Documents": # Target folder must not be set to 'Documents' because it contains the complete standards library.
+    print(
+        "WARNING: The target folder is set to 'Documents', which contains the complete standards library. Please rename to the correct target directory containing the files to be renamed before proceeding. Exiting."
+    )
+    exit(1)
+
 # ------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------
@@ -19,7 +28,7 @@ DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
 REPORTS_DIRECTORY = AUTOMATION_DIRECTORY / "Reports"
 
 # Top-level folder containing the PDFs.
-TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target"
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / Target_Folder
 
 # Folders used for rejected and held documents.
 REJECTED_DIRECTORY = TARGET_DIRECTORY / "Rejected"

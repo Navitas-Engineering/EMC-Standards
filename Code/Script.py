@@ -17,6 +17,15 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 
+Target_Folder = "New Documents"  # Enter name of the folder containing the PDFs to be renamed here.
+
+#------------------------------------------------------------
+if Target_Folder == "Documents": # Target folder must not be set to 'Documents' because it contains the complete standards library.
+    print(
+        "WARNING: The target folder is set to 'Documents', which contains the complete standards library. Please rename to the correct target directory containing the files to be renamed before proceeding. Exiting."
+    )
+    exit(1)
+
 # ------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------
@@ -43,7 +52,7 @@ REPORTS_DIRECTORY = (
 DOCUMENTS_DIRECTORY = AUTOMATION_DIRECTORY.parent
 
 # C:\Users\JoshuaDickens\Documents\Target
-TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / "Target" #Enter name of the folder containing the PDFs to be renamed here. 
+TARGET_DIRECTORY = DOCUMENTS_DIRECTORY / Target_Folder  
 
 REJECTED_DIRECTORY = (
     TARGET_DIRECTORY

@@ -13,5 +13,5 @@ venv/
 Reports/*
 !Reports/.gitkeep
 
-# Excel temporary files
+# Excel report files
 ~$*.xlsx
